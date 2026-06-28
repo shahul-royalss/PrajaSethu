@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Builds
+dist/
+.next/
+out/
+
+# Databases (SQLite, pilot)
+*.db
+*.db-journal
+
+# Prisma local artifacts
+apps/api/prisma/migrations/
+
+# Env overrides (committed defaults are safe; local secrets are not)
+.env.local
+*.local
+
+# Logs / OS
+*.log
+.DS_Store
