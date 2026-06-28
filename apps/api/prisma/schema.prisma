@@ -23,10 +23,18 @@ model Citizen {
   id                String   @id @default(cuid())
   aadhaarToken      String?  @unique // vault reference only — NEVER the raw Aadhaar number
   name              String
+  coName            String?  // C/o name (father/husband) — per the PGRS form
+  dob               String?  // date of birth (YYYY-MM-DD)
+  gender            String?  // MALE | FEMALE | OTHER
   mobile            String
   address           String?
+  houseNo           String?
+  habitation        String?
+  village           String?
   mandal            String?
+  district          String?
   secretariatCode   String?
+  applicantType     String   @default("INDIVIDUAL") // INDIVIDUAL | COMMUNITY
   languagePref      String   @default("te")
   vulnerabilityFlags String  @default("[]") // JSON array, e.g. ["ELDERLY","DISABILITY"]
   createdAt         DateTime @default(now())
@@ -111,8 +119,12 @@ model Grievance {
 
   geoLat              Float?
   geoLng              Float?
+  // Location of the grievance (may differ from the petitioner's address — per the form)
+  district            String?
   mandal              String?
+  village             String?
   secretariatCode     String?
+  applicantType       String   @default("INDIVIDUAL") // INDIVIDUAL | COMMUNITY
 
   status              String   @default("DRAFT")
   currentAssigneeId   String?

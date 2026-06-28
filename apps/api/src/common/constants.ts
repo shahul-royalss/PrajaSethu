@@ -27,6 +27,23 @@ export const Category = {
 } as const;
 export type CategoryType = (typeof Category)[keyof typeof Category];
 
+export const Gender = {
+  MALE: 'MALE',
+  FEMALE: 'FEMALE',
+  OTHER: 'OTHER',
+} as const;
+export type GenderType = (typeof Gender)[keyof typeof Gender];
+
+export const ApplicantType = {
+  INDIVIDUAL: 'INDIVIDUAL',
+  COMMUNITY: 'COMMUNITY',
+} as const;
+export type ApplicantTypeType = (typeof ApplicantType)[keyof typeof ApplicantType];
+
+// Public tracking-ID prefix. Spandana's "YSR#" is rebranded to a neutral, current
+// "PGRS" code (configurable via TRACKING_PREFIX) so it isn't tied to a past govt.
+export const TRACKING_PREFIX = process.env.TRACKING_PREFIX ?? 'PGRS';
+
 // Grievance lifecycle states (Blueprint Part E.2)
 export const Status = {
   DRAFT: 'DRAFT',

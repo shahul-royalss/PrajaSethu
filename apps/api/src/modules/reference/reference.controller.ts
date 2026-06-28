@@ -27,6 +27,12 @@ export class ReferenceController {
     return this.reference.xroadServices();
   }
 
+  @Public()
+  @Get('geography')
+  geography() {
+    return this.reference.geography();
+  }
+
   @RequireRoles(Roles.SUPERVISOR, Roles.COLLECTOR, Roles.DA, Roles.OFFICER)
   @Get('officers')
   officers(@Query('deptId') deptId?: string) {

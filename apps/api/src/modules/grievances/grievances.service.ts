@@ -17,7 +17,7 @@ import { LlmService } from '../llm/llm.service';
 import { DataExchangeService } from '../dataexchange/dataexchange.service';
 import { AuthUser } from '../../common/auth/current-user.decorator';
 import { canTransition, InvalidTransitionError } from '../../common/state-machine';
-import { Category, LedgerEvent, Roles, Status, StatusType } from '../../common/constants';
+import { Category, LedgerEvent, Roles, Status, StatusType, TRACKING_PREFIX } from '../../common/constants';
 import { parseJson } from '../../common/util';
 import {
   ActionDto,
@@ -70,8 +70,16 @@ export class GrievancesService {
       aadhaar: dto.aadhaar,
       mobile: dto.mobile,
       name: dto.name,
+      coName: dto.coName,
+      dob: dto.dob,
+      gender: dto.gender,
+      houseNo: dto.houseNo,
+      habitation: dto.habitation,
+      village: dto.village,
       mandal: dto.mandal,
+      district: dto.district,
       secretariatCode: dto.secretariatCode,
+      applicantType: dto.applicantType,
       languagePref: language,
       vulnerabilityFlags: dto.vulnerabilityFlags,
     });
@@ -112,8 +120,12 @@ export class GrievancesService {
         priorityScore,
         geoLat: dto.geoLat,
         geoLng: dto.geoLng,
-        mandal: dto.mandal ?? citizen.mandal,
+        // Grievance location (falls back to the petitioner's address).
+        district: dto.grievanceDistrict ?? dto.district ?? citizen.district,
+        mandal: dto.grievanceMandal ?? dto.mandal ?? citizen.mandal,
+        village: dto.grievanceVillage ?? dto.village ?? citizen.village,
         secretariatCode: dto.secretariatCode ?? citizen.secretariatCode,
+        applicantType: dto.applicantType ?? citizen.applicantType,
         status: Status.REGISTERED,
         currentLevel: 1,
         registeredAt: new Date(),
@@ -546,6 +558,7 @@ export class GrievancesService {
       category: g.category,
       department: g.department ? { en: g.department.nameEn, te: g.department.nameTe } : null,
       subject: subject ? { en: subject.nameEn, te: subject.nameTe } : null,
+      location: { district: g.district, mandal: g.mandal, village: g.village },
       plainStatus: plain,
       slaDueAt: g.slaDueAt,
       slaBreachPredicted: g.slaBreachPredicted,
@@ -576,6 +589,16 @@ export class GrievancesService {
       xroad,
       integrity,
     };
+  }
+
+  async listForCitizen(user: AuthUser) {
+    if (user.kind !== 'CITIZEN') throw new ForbiddenException('Citizen sign-in required.');
+    const items = await this.prisma.grievance.findMany({
+      where: { petitionerId: user.sub },
+      orderBy: { createdAt: 'desc' },
+      include: { department: true },
+    });
+    return items.map((g) => ({ ...this.serializeList(g), village: g.village }));
   }
 
   async listForOfficer(actor: AuthUser, filters: { status?: string; slaRisk?: boolean }) {
@@ -621,12 +644,12 @@ export class GrievancesService {
     for (let attempt = 0; attempt < 5; attempt++) {
       const count = await this.prisma.grievance.count();
       const seq = String(count + 1 + attempt).padStart(6, '0');
-      const candidate = `YSR-AP-${year}-${seq}`;
+      const candidate = `${TRACKING_PREFIX}-AP-${year}-${seq}`;
       const exists = await this.prisma.grievance.findUnique({ where: { ysr: candidate } });
       if (!exists) return candidate;
     }
     // Fallback: guaranteed-unique suffix.
-    return `YSR-AP-${year}-${Date.now().toString().slice(-6)}`;
+    return `${TRACKING_PREFIX}-AP-${year}-${Date.now().toString().slice(-6)}`;
   }
 
   private async getOrThrow(id: string) {
@@ -710,10 +733,19 @@ export class GrievancesService {
       slaBreachPredicted: g.slaBreachPredicted,
       petitioner: {
         name: g.petitioner?.name,
+        coName: g.petitioner?.coName,
+        gender: g.petitioner?.gender,
+        dob: g.petitioner?.dob,
         mobileMasked: g.petitioner ? maskMobileShort(g.petitioner.mobile) : null,
+        houseNo: g.petitioner?.houseNo,
+        habitation: g.petitioner?.habitation,
+        village: g.petitioner?.village,
         mandal: g.petitioner?.mandal,
+        district: g.petitioner?.district,
+        applicantType: g.petitioner?.applicantType,
         vulnerabilityFlags: parseJson<string[]>(g.petitioner?.vulnerabilityFlags ?? '[]', []),
       },
+      location: { district: g.district, mandal: g.mandal, village: g.village },
       assignments: g.assignments?.map((a: any) => ({
         assignee: a.assignee?.name,
         role: a.assignee?.role,

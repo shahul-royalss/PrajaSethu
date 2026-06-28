@@ -33,3 +33,34 @@ export function clearSession() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(OFFICER_KEY);
 }
+
+// ── Citizen session (kept separate from officer) ─────────────────────────────
+export interface CitizenUser {
+  id: string;
+  name: string;
+  mobileMasked?: string;
+}
+
+const C_TOKEN_KEY = 'praja_citizen_token';
+const C_USER_KEY = 'praja_citizen';
+
+export function saveCitizenSession(token: string, citizen: CitizenUser) {
+  localStorage.setItem(C_TOKEN_KEY, token);
+  localStorage.setItem(C_USER_KEY, JSON.stringify(citizen));
+}
+
+export function getCitizenToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(C_TOKEN_KEY);
+}
+
+export function getCitizen(): CitizenUser | null {
+  if (typeof window === 'undefined') return null;
+  const raw = localStorage.getItem(C_USER_KEY);
+  return raw ? (JSON.parse(raw) as CitizenUser) : null;
+}
+
+export function clearCitizenSession() {
+  localStorage.removeItem(C_TOKEN_KEY);
+  localStorage.removeItem(C_USER_KEY);
+}

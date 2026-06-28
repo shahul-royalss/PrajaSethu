@@ -10,10 +10,13 @@ import { IntegrityShield } from '../../components/IntegrityShield';
 import { api, ApiError } from '../../lib/api';
 import { PublicGrievance } from '../../lib/types';
 import { daysLeft, fmtDate } from '../../lib/i18n';
+import { useI18n } from '../../lib/intl';
+import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 
 export default function TrackView() {
   const params = useParams<{ ysr: string }>();
   const ysr = decodeURIComponent(params.ysr);
+  const { t } = useI18n();
   const [g, setG] = useState<PublicGrievance | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,7 +71,7 @@ export default function TrackView() {
 
   return (
     <div className="min-h-screen">
-      <Header title="Track" right={<Link href="/track" className="text-sm text-brand hover:underline">New search</Link>} />
+      <Header title="Track" right={<div className="flex items-center gap-3"><LanguageSwitcher compact /><Link href="/track" className="text-sm text-brand hover:underline">{t('trackByNumber')}</Link></div>} />
       <main className="mx-auto max-w-2xl px-4 py-6 sm:px-6">
         {loading && <Spinner label="Loading your grievance…" />}
         {error && (
@@ -129,12 +132,12 @@ export default function TrackView() {
             {g.status === 'RESOLVED' && (
               <Card className="border-green-200">
                 <CardBody className="space-y-3">
-                  <div className="text-sm font-semibold text-slate-800">This grievance is marked resolved — is it actually fixed?</div>
-                  <p className="text-xs text-slate-500">No silent closures: it only closes when you confirm (Blueprint G.6).</p>
+                  <div className="text-sm font-semibold text-slate-800">{t('resolvedAsk')}</div>
+                  <p className="text-xs text-slate-500">{t('resolvedAskNote')}</p>
                   {msg && <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">{msg}</div>}
                   <div className="flex flex-wrap gap-2">
-                    <Button onClick={() => confirmClosure(true)} disabled={busy} variant="primary">✓ Yes, close it</Button>
-                    <Button onClick={() => confirmClosure(false)} disabled={busy} variant="ghost">✗ No, reopen</Button>
+                    <Button onClick={() => confirmClosure(true)} disabled={busy} variant="primary">✓ {t('closeYes')}</Button>
+                    <Button onClick={() => confirmClosure(false)} disabled={busy} variant="ghost">✗ {t('reopenNo')}</Button>
                   </div>
                 </CardBody>
               </Card>

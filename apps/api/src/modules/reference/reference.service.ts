@@ -49,4 +49,22 @@ export class ReferenceService {
   xroadServices() {
     return this.dataExchange.listServices();
   }
+
+  // Lightweight geography for the form's location pickers (pilot = Kuppam, Chittoor).
+  geography() {
+    return {
+      districts: [
+        'Chittoor', 'Annamayya', 'Tirupati', 'Anantapur', 'Sri Sathya Sai',
+        'YSR Kadapa', 'Nellore', 'Prakasam', 'Guntur', 'Krishna', 'NTR',
+        'East Godavari', 'West Godavari', 'Visakhapatnam', 'Srikakulam',
+      ],
+      mandalsByDistrict: {
+        Chittoor: ['Kuppam', 'Ramakuppam', 'Santhipuram', 'Gudupalle', 'Palamaner'],
+      },
+      villagesByMandal: {
+        Kuppam: ['Kuppam', 'Gudupalle', 'Sakrayapeta', 'Ramakuppam', 'Cheldiganipalle', 'Other'],
+        Ramakuppam: ['Ramakuppam', 'Veeraksamakkapalle', 'Gangadasanapalle', 'Other'],
+      },
+    };
+  }
 }

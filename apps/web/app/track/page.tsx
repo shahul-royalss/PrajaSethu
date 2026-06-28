@@ -2,11 +2,13 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Header } from '../components/Header';
-import { Button, Card, CardBody, Field } from '../components/ui';
+import Link from 'next/link';
+import { useI18n } from '../lib/intl';
+import { LanguageSwitcher } from '../components/LanguageSwitcher';
 
 export default function TrackEntry() {
   const router = useRouter();
+  const { t } = useI18n();
   const [ysr, setYsr] = useState('');
 
   function go() {
@@ -15,35 +17,35 @@ export default function TrackEntry() {
   }
 
   return (
-    <div className="min-h-screen">
-      <Header title="Track" />
-      <main className="mx-auto max-w-xl px-4 py-10 sm:px-6">
-        <Card>
-          <CardBody className="space-y-4">
-            <div>
-              <h1 className="text-xl font-bold text-slate-900">Track your grievance</h1>
-              <p className="font-telugu text-sm text-slate-500">మీ ఫిర్యాదు స్థితిని తెలుసుకోండి</p>
-            </div>
-            <Field label="Tracking ID (YSR number)" hint="Sent to you by SMS when you filed.">
-              <input
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                placeholder="YSR-AP-2026-000001"
-                value={ysr}
-                onChange={(e) => setYsr(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && go()}
-              />
-            </Field>
-            <Button onClick={go} disabled={!ysr.trim()} className="w-full">
-              Track →
-            </Button>
-            <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
-              Try a sample: <button className="font-mono text-brand underline" onClick={() => setYsr('YSR-AP-2026-000001')}>YSR-AP-2026-000001</button>{' '}
-              (in progress), <button className="font-mono text-brand underline" onClick={() => setYsr('YSR-AP-2026-000006')}>…000006</button>{' '}
-              (resolved, awaiting your confirmation), <button className="font-mono text-brand underline" onClick={() => setYsr('YSR-AP-2026-000004')}>…000004</button>{' '}
-              (closed).
-            </div>
-          </CardBody>
-        </Card>
+    <div className="min-h-screen bg-slate-50">
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-xl items-center justify-between px-4 py-3">
+          <Link href="/citizen" className="text-sm font-semibold text-slate-700">← {t('appName')}</Link>
+          <LanguageSwitcher compact />
+        </div>
+      </header>
+      <main className="mx-auto max-w-xl px-4 py-10">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h1 className="text-xl font-bold text-slate-900">{t('trackTitle')}</h1>
+          <label className="mt-4 block">
+            <span className="mb-1 block text-sm font-medium text-slate-700">{t('trackByNumber')}</span>
+            <input
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base"
+              placeholder="PGRS-AP-2026-000001"
+              value={ysr}
+              onChange={(e) => setYsr(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && go()}
+            />
+          </label>
+          <button onClick={go} disabled={!ysr.trim()} className="mt-4 w-full rounded-xl bg-brand py-3 text-base font-semibold text-white disabled:opacity-50">
+            {t('next')} →
+          </button>
+          <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
+            {['PGRS-AP-2026-000001', 'PGRS-AP-2026-000006', 'PGRS-AP-2026-000004'].map((s) => (
+              <button key={s} className="mr-2 font-mono text-brand underline" onClick={() => setYsr(s)}>{s}</button>
+            ))}
+          </div>
+        </div>
       </main>
     </div>
   );

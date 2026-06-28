@@ -35,11 +35,35 @@ export class IdentityService {
     aadhaar?: string;
     mobile: string;
     name?: string;
+    coName?: string;
+    dob?: string;
+    gender?: string;
+    houseNo?: string;
+    habitation?: string;
+    village?: string;
     mandal?: string;
+    district?: string;
     secretariatCode?: string;
+    applicantType?: string;
     languagePref?: string;
     vulnerabilityFlags?: string[];
   }) {
+    // Only set provided fields (don't overwrite existing data with undefined).
+    const profile = {
+      coName: input.coName,
+      dob: input.dob,
+      gender: input.gender,
+      houseNo: input.houseNo,
+      habitation: input.habitation,
+      village: input.village,
+      mandal: input.mandal,
+      district: input.district,
+      secretariatCode: input.secretariatCode,
+      applicantType: input.applicantType,
+      languagePref: input.languagePref,
+    };
+    const definedProfile = Object.fromEntries(Object.entries(profile).filter(([, v]) => v !== undefined));
+
     let aadhaarToken: string | undefined;
     if (input.aadhaar) {
       aadhaarToken = this.tokenize(input.aadhaar).token;
@@ -48,18 +72,17 @@ export class IdentityService {
     }
     const byMobile = await this.prisma.citizen.findFirst({ where: { mobile: input.mobile } });
     if (byMobile) {
-      if (aadhaarToken && !byMobile.aadhaarToken) {
-        return this.prisma.citizen.update({ where: { id: byMobile.id }, data: { aadhaarToken } });
-      }
-      return byMobile;
+      return this.prisma.citizen.update({
+        where: { id: byMobile.id },
+        data: { ...definedProfile, ...(aadhaarToken && !byMobile.aadhaarToken ? { aadhaarToken } : {}) },
+      });
     }
     return this.prisma.citizen.create({
       data: {
         aadhaarToken,
         mobile: input.mobile,
         name: input.name ?? 'Citizen',
-        mandal: input.mandal,
-        secretariatCode: input.secretariatCode,
+        ...definedProfile,
         languagePref: input.languagePref ?? 'te',
         vulnerabilityFlags: JSON.stringify(input.vulnerabilityFlags ?? []),
       },

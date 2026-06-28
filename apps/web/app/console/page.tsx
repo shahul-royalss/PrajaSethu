@@ -210,7 +210,7 @@ function Console({ token }: { token: string }) {
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-400">Voice-first · AI pre-fills, human confirms · consent logged</span>
             <Button onClick={submit} disabled={submitting || !mobile || !description || !deptId}>
-              {submitting ? 'Submitting…' : 'Submit → issue YSR'}
+              {submitting ? 'Submitting…' : 'Submit → issue PGRS no.'}
             </Button>
           </div>
         </CardBody>

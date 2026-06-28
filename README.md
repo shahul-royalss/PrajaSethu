@@ -15,7 +15,12 @@ adapters), so you can see the whole grievance lifecycle work today.
 | App | Stack | What it is |
 |---|---|---|
 | `apps/api` | **NestJS 10 · Prisma · SQLite** | Core grievance services as a modular monolith (the blueprint's recommended pilot shape) |
-| `apps/web` | **Next.js 15 · React 19 · Tailwind** | The six role-tuned surfaces (Part F) |
+| `apps/web` | **Next.js 15 · React 19 · Tailwind** | Two portals (Citizen + Official), the six role-tuned surfaces (Part F), **12 Indian languages**, and a voice-first step-by-step filing form |
+
+**Citizen vs Official.** The landing splits into a **Citizen** portal (mobile-OTP sign-in → dashboard → a guided,
+one-question-at-a-time complaint form with **speak-to-fill + read-aloud** so low-literacy users can file unaided, in any
+of 12 Indian languages) and an **Official** portal (single sign-in → a role-based hub routing each officer to only the
+workspaces their role allows). The public tracking ID is **`PGRS-…`** (the prior `YSR` branding was retired).
 
 ### Screenshots
 
@@ -44,7 +49,7 @@ stand-in, so the whole system runs end-to-end and a real client drops in later w
 | **Database** | SQLite (zero-setup) | PostgreSQL + pgvector (swap the Prisma provider — see *Scale path*) |
 | **Notifications** | Mock SMS/IVR/email persisted to `NotificationLog` | Real gateway behind `NotificationService` |
 
-Everything else — the grievance **lifecycle state machine**, **YSR tracking**, **geo + subject dynamic assignment**,
+Everything else — the grievance **lifecycle state machine**, **PGRS tracking ID**, **geo + subject dynamic assignment**,
 **SLA clock + breach prediction + auto-escalation (L1→L4)**, **reopen-to-higher-authority**, **no-silent-closure**,
 **finance/non-finance rules**, **RBAC/ABAC**, **consent**, **hotspot/anomaly detection**, **dashboards** — is really
 implemented and exercised by the seed + tests.
@@ -93,8 +98,8 @@ Officer surfaces use mock Keycloak accounts — password **`Praja@123`**:
 | `collector` | Collector | Command centre |
 | `auditor` | Auditor | Audit & anti-corruption console |
 
-Track a citizen grievance (no login) with a seeded YSR, e.g. `YSR-AP-2026-000001` (in progress),
-`YSR-AP-2026-000006` (resolved — awaiting your confirmation), `YSR-AP-2026-000004` (closed).
+Track a citizen grievance (no login) with a seeded tracking number, e.g. `PGRS-AP-2026-000001` (in progress),
+`PGRS-AP-2026-000006` (resolved — awaiting your confirmation), `PGRS-AP-2026-000004` (closed).
 
 ---
 
@@ -103,7 +108,7 @@ Track a citizen grievance (no login) with a seeded YSR, e.g. `YSR-AP-2026-000001
 1. **Citizen tracking** (`/track`) — plain-language Telugu status, timeline, **one-tap ledger integrity verification**,
    confirm-or-reopen (no silent closure), read-aloud (TTS).
 2. **Sachivalayam operator console** (`/console`) — *the primary pilot UI.* Voice-first assisted filing, AI suggestion
-   (human-confirmed), consent capture, YSR + QR slip.
+   (human-confirmed), consent capture, PGRS no. + QR slip.
 3. **Officer workbench** (`/officer`) — SLA-risk queue, AI summary, **X-Road verified facts inline**, AI draft-assist
    (human-approved), notarised actions.
 4. **Supervisor / Mandal cell** (`/supervisor`) — SLA compliance, escalations, officer load, **anomaly leads**.
@@ -160,7 +165,7 @@ curl -X POST http://localhost:4000/api/grievances -H 'Content-Type: application/
        "category":"NON_FINANCE","mandal":"Kuppam"}'
 
 # Citizen track + integrity (use a seeded ysr)
-curl http://localhost:4000/api/grievances/public/YSR-AP-2026-000001
+curl http://localhost:4000/api/grievances/public/PGRS-AP-2026-000001
 ```
 
 The build was verified with a headless-Chromium pass over all six surfaces (intake → routing → tracking →

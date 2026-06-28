@@ -46,6 +46,35 @@ export class CreateGrievanceDto {
   @IsString()
   aadhaar?: string;
 
+  // ── Petitioner details (PGRS form) ──
+  @IsOptional()
+  @IsString()
+  coName?: string; // C/o (father/husband) name
+
+  @IsOptional()
+  @IsString()
+  dob?: string;
+
+  @IsOptional()
+  @IsString()
+  gender?: string;
+
+  @IsOptional()
+  @IsString()
+  houseNo?: string;
+
+  @IsOptional()
+  @IsString()
+  habitation?: string;
+
+  @IsOptional()
+  @IsString()
+  district?: string;
+
+  @IsOptional()
+  @IsString()
+  village?: string;
+
   @IsOptional()
   @IsString()
   mandal?: string;
@@ -53,6 +82,23 @@ export class CreateGrievanceDto {
   @IsOptional()
   @IsString()
   secretariatCode?: string;
+
+  @IsOptional()
+  @IsString()
+  applicantType?: string; // INDIVIDUAL | COMMUNITY
+
+  // ── Location of the grievance (may differ from the applicant's address) ──
+  @IsOptional()
+  @IsString()
+  grievanceDistrict?: string;
+
+  @IsOptional()
+  @IsString()
+  grievanceMandal?: string;
+
+  @IsOptional()
+  @IsString()
+  grievanceVillage?: string;
 
   @IsOptional()
   @IsArray()

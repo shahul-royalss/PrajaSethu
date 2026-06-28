@@ -54,6 +54,12 @@ export class GrievancesController {
     return this.grievances.citizenConfirmClosure(idOrYsr, dto);
   }
 
+  // ── Citizen's own grievances (any valid citizen token) ────────────────────
+  @Get('citizen/mine')
+  citizenMine(@CurrentUser() actor: AuthUser) {
+    return this.grievances.listForCitizen(actor);
+  }
+
   // ── Officer / supervisor queues ───────────────────────────────────────────
   @RequireRoles(Roles.OFFICER, Roles.SUPERVISOR, Roles.COLLECTOR)
   @Get('mine')

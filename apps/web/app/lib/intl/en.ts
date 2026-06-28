@@ -1,0 +1,143 @@
+// English is the source of truth for all citizen-facing copy. Every other language
+// in translations.ts provides the same keys; missing keys fall back to English.
+export const en = {
+  // brand / common
+  appName: 'Praja Setu',
+  tagline: "People's Bridge — Public Grievance Redressal",
+  selectLanguage: 'Select your language',
+  language: 'Language',
+  continue: 'Continue',
+  back: 'Back',
+  next: 'Next',
+  submit: 'Submit',
+  cancel: 'Cancel',
+  yes: 'Yes',
+  no: 'No',
+  ok: 'OK',
+  loading: 'Loading…',
+  retry: 'Try again',
+  optional: 'optional',
+  required: 'This is needed',
+  callHelpline: 'Call 1902 for help',
+  readAloud: 'Read aloud',
+  changeLanguage: 'Change language',
+
+  // roles / doors
+  whoAreYou: 'Who are you?',
+  citizen: 'Citizen',
+  citizenDesc: 'File a complaint or track its status',
+  official: 'Official / Staff',
+  officialDesc: 'Officers and Sachivalayam staff sign in',
+  openCitizen: 'File or track a complaint',
+  openOfficial: 'Staff sign in',
+
+  // citizen login
+  citizenSignIn: 'Citizen sign-in',
+  enterMobile: 'Enter your mobile number',
+  mobilePlaceholder: '10-digit mobile number',
+  sendOtp: 'Send code (OTP)',
+  otpSent: 'We sent a code to your phone',
+  enterOtp: 'Enter the 6-digit code',
+  verify: 'Verify & continue',
+  resendOtp: 'Resend code',
+  loginNoOtpNote: 'No smartphone needed — a Sachivalayam operator can file for you too.',
+
+  // citizen dashboard
+  welcome: 'Welcome',
+  myComplaints: 'My complaints',
+  fileNew: 'File a new complaint',
+  fileNewDesc: 'Tell us your problem step by step — speak or type in your language',
+  trackTitle: 'Track a complaint',
+  trackByNumber: 'Track by complaint number',
+  noComplaints: 'You have not filed any complaints yet',
+  logout: 'Log out',
+  status: 'Status',
+  filedOn: 'Filed on',
+
+  // guided form — flow
+  formTitle: 'File a complaint',
+  stepOf: 'Step {n} of {total}',
+  tapToSpeak: 'Tap and speak',
+  listening: 'Listening…',
+  orTypeHere: 'or type here',
+  speakOrType: 'You can speak in your language, or type',
+
+  // guided form — questions
+  qName: 'What is your name?',
+  qCoName: "Father's or husband's name?",
+  qMobile: 'What is your mobile number?',
+  qAadhaar: 'Aadhaar number?',
+  aadhaarNote: 'Optional. It is kept private and never shown to anyone.',
+  qDob: 'Your date of birth?',
+  qGender: 'Your gender?',
+  optMale: 'Male',
+  optFemale: 'Female',
+  optOther: 'Other',
+  qApplicantType: 'Is this your own problem, or your whole community’s?',
+  optIndividual: 'Mine (personal)',
+  optCommunity: 'My community',
+  qDistrict: 'Which district?',
+  qMandal: 'Which mandal?',
+  qVillage: 'Which village / ward?',
+  qHouseNo: 'House number?',
+  qHabitation: 'Habitation / colony?',
+  qProblemType: 'What is the problem about?',
+  qProblemTypeHelp: 'Pick the closest one — we will confirm it for you.',
+  qDescribe: 'Describe your problem',
+  qDescribeHelp: 'Speak or type what happened, in your own words.',
+
+  // categories (citizen-friendly)
+  catWater: 'Water / borewell',
+  catPower: 'Electricity',
+  catRation: 'Ration card',
+  catPension: 'Pension',
+  catLand: 'Land / revenue',
+  catOther: 'Something else',
+
+  // review + success
+  reviewTitle: 'Please check your details',
+  editAnswer: 'Edit',
+  confirmSubmit: 'Submit my complaint',
+  submitting: 'Submitting…',
+  successTitle: 'Complaint filed successfully',
+  yourNumber: 'Your complaint number',
+  successSms: 'We have sent this number to your phone by SMS.',
+  trackNow: 'Track it now',
+  fileAnother: 'File another',
+
+  // tracking view
+  trackHeading: 'Your complaint',
+  integrityVerified: 'Verified & unaltered',
+  integrityCheck: 'Check integrity',
+  timeline: 'Progress',
+  slaLeft: '{n} day(s) left',
+  slaOverdue: '{n} day(s) overdue',
+  resolvedAsk: 'Is your problem actually solved?',
+  resolvedAskNote: 'It will only be closed when you say yes.',
+  closeYes: 'Yes, close it',
+  reopenNo: 'No, reopen it',
+  talkToAssistant: 'Talk to an assistant',
+
+  // status names
+  st_REGISTERED: 'Registered',
+  st_CLASSIFIED: 'Categorised',
+  st_ASSIGNED: 'Assigned to officer',
+  st_UNDER_ENQUIRY: 'In progress',
+  st_ACTION_TAKEN: 'Action taken',
+  st_RESOLVED: 'Resolved',
+  st_CLOSED: 'Closed',
+  st_REOPENED: 'Reopened',
+  st_ON_HOLD: 'On hold',
+  st_REROUTED: 'Rerouted',
+  st_MERGED: 'Merged',
+  st_REJECTED: 'Rejected',
+
+  // why better
+  whyBetter: 'Why this is better',
+  why1: 'Speak in your language — no reading or typing needed',
+  why2: 'Tamper-proof record you can verify yourself',
+  why3: 'No complaint is closed without your confirmation',
+  why4: 'Track every step, get plain-language updates',
+};
+
+export type StringKey = keyof typeof en;
