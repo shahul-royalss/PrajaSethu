@@ -1,0 +1,45 @@
+# Praja Setu — Render blueprint (https://render.com).
+# In the Render dashboard: New + → Blueprint → pick this repo → Apply.
+# Two public services come up with HTTPS URLs; open the web one.
+#
+# The web service proxies /api to the API service (set via API_PROXY_TARGET below),
+# so the browser only ever talks to the web URL — no CORS, one public surface.
+
+services:
+  - type: web
+    name: praja-setu-api
+    runtime: docker
+    rootDir: apps/api
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: "4000"
+      - key: WEB_ORIGIN
+        value: "*"
+      - key: JWT_SECRET
+        generateValue: true
+    # For data that survives redeploys, add a disk and set DATABASE_URL to a path
+    # on it (otherwise the seeded demo db is re-created from the image each deploy):
+    # disk:
+    #   name: praja-data
+    #   mountPath: /app/prisma
+    #   sizeGB: 1
+
+  - type: web
+    name: praja-setu-web
+    runtime: docker
+    rootDir: apps/web
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: PORT
+        value: "3000"
+      - key: NEXT_PUBLIC_API_BASE
+        value: "/api"
+      - key: API_PROXY_TARGET
+        fromService:
+          type: web
+          name: praja-setu-api
+          property: host

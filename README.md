@@ -69,6 +69,18 @@ Then open **http://localhost:3000**.
 
 > **Production-style run:** `npm run build` then `npm run start:api` / `npm run start:web`.
 
+### Deploy (go live)
+
+The app is container-ready. The quickest public deploy on any server with Docker:
+
+```bash
+JWT_SECRET=$(openssl rand -hex 32) docker compose -f docker-compose.prod.yml up -d --build
+# → http://<server>:3000   (the web app proxies /api to the API privately — one public port)
+```
+
+Managed one-click options (Render blueprint in [`render.yaml`](render.yaml), plus Railway/Fly/Vercel)
+and the full configuration reference are in **[`DEPLOY.md`](DEPLOY.md)**.
+
 ### Demo logins
 
 Officer surfaces use mock Keycloak accounts — password **`Praja@123`**:
