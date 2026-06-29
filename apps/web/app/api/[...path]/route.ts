@@ -8,21 +8,24 @@ import { NextRequest } from 'next/server';
 // every request and reads API_PROXY_TARGET live, so the same image works anywhere.
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+export const maxDuration = 60; // allow time to ride a free-tier API cold start
 
 function apiBase(): string {
   let t = process.env.API_PROXY_TARGET ?? 'http://localhost:4000';
   if (!/^https?:\/\//.test(t)) {
-    // Accept a bare host[:port]; public hosts (a dot, not an IP/localhost) → https.
     const isPublic = t.includes('.') && !/^\d+\.\d+\.\d+\.\d+/.test(t) && !t.startsWith('localhost');
     t = `${isPublic ? 'https' : 'http'}://${t}`;
   }
   return t.replace(/\/+$/, '');
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function handler(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   const { path } = await ctx.params;
   const search = new URL(req.url).search;
-  const dest = `${apiBase()}/api/${path.join('/')}${search}`;
+  const base = apiBase();
+  const dest = `${base}/api/${path.join('/')}${search}`;
 
   const headers = new Headers(req.headers);
   headers.delete('host');
@@ -34,23 +37,35 @@ async function handler(req: NextRequest, ctx: { params: Promise<{ path: string[]
     init.body = await req.arrayBuffer();
   }
 
-  let res: Response;
-  try {
-    res = await fetch(dest, init);
-  } catch {
-    return new Response(JSON.stringify({ message: 'The server is busy or waking up. Please try again in a moment.' }), {
-      status: 502,
-      headers: { 'content-type': 'application/json' },
-    });
+  // Ride out a sleeping/free-tier API: gateway 502/503/504 and connection errors
+  // mean the request never reached the app, so retrying is safe (even for POST).
+  const MAX = 6;
+  for (let attempt = 1; attempt <= MAX; attempt++) {
+    let res: Response | null = null;
+    try {
+      res = await fetch(dest, init);
+    } catch (e) {
+      console.error(`[api-proxy] attempt ${attempt} fetch error → ${dest}:`, (e as Error)?.message);
+    }
+
+    if (res && ![502, 503, 504].includes(res.status)) {
+      if (res.status >= 500) console.error(`[api-proxy] upstream ${res.status} ← ${dest}`);
+      const body = await res.arrayBuffer();
+      const out = new Headers(res.headers);
+      out.delete('content-encoding');
+      out.delete('content-length');
+      out.delete('transfer-encoding');
+      return new Response(body, { status: res.status, headers: out });
+    }
+
+    if (res) console.error(`[api-proxy] attempt ${attempt} gateway ${res.status} ← ${dest} (API waking?)`);
+    if (attempt < MAX) await sleep(attempt <= 2 ? 2000 : 5000); // ~2,2,5,5,5s ≈ 19s
   }
 
-  const body = await res.arrayBuffer();
-  const out = new Headers(res.headers);
-  // These describe the upstream transfer, not ours — drop so the browser doesn't choke.
-  out.delete('content-encoding');
-  out.delete('content-length');
-  out.delete('transfer-encoding');
-  return new Response(body, { status: res.status, headers: out });
+  return new Response(
+    JSON.stringify({ message: 'The server is busy or waking up. Please wait a moment and try again.' }),
+    { status: 502, headers: { 'content-type': 'application/json' } },
+  );
 }
 
 export const GET = handler;
