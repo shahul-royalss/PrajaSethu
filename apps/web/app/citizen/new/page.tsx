@@ -384,7 +384,7 @@ function StepInput({
     case 'district':
       return <Picker value={form.district} onChange={(v) => set({ district: v, mandal: '', village: '' })} options={geo?.districts ?? ['Chittoor']} />;
     case 'mandal':
-      return <Picker value={form.mandal} onChange={(v) => set({ mandal: v, village: '' })} options={geo?.mandalsByDistrict[form.district] ?? ['Kuppam']} />;
+      return <Picker value={form.mandal} onChange={(v) => set({ mandal: v, village: '' })} options={geo?.mandalsByDistrict[form.district] ?? ['Kuppam']} allowFree />;
     case 'village':
       return <Picker value={form.village} onChange={(v) => set({ village: v })} options={geo?.villagesByMandal[form.mandal] ?? ['Other']} allowFree />;
     case 'category':

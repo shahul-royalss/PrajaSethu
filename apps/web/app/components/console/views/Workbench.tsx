@@ -253,29 +253,64 @@ export function WorkbenchView({ token, officer }: { token: string; officer: Offi
   );
 }
 
-function CoPilot({ detail, services, selected, bi, onLookup, busy }: { detail: any; services: XroadService[]; token: string; selected: string; bi: (en: string, te: string) => string; onLookup: (service: string) => void; busy: boolean }) {
+function CoPilot({ detail, services, selected, token, bi, onLookup, busy }: { detail: any; services: XroadService[]; token: string; selected: string; bi: (en: string, te: string) => string; onLookup: (service: string) => void; busy: boolean }) {
   const p = priority(detail as any);
-  const conf = detail.aiSuggested?.confidence ? Math.round(detail.aiSuggested.confidence * 100) : 92;
+  const [ai, setAi] = useState<any>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setAi(null); setAiBusy(true);
+    api.post<any>(`/grievances/${selected}/ai-analysis`, {}, token)
+      .then((a) => { if (alive) setAi(a); })
+      .catch(() => {})
+      .finally(() => { if (alive) setAiBusy(false); });
+    return () => { alive = false; };
+  }, [selected, token]);
+
+  const conf = ai?.confidence ? Math.round(ai.confidence * 100) : detail.aiSuggested?.confidence ? Math.round(detail.aiSuggested.confidence * 100) : 92;
   const risk = isOverdue(detail) ? 92 : detail.slaBreachPredicted ? 74 : 28;
   const dash = `${risk} 100`;
-  const summary = `${detail.subject?.en ?? 'This grievance'} in ${detail.mandal ?? 'the mandal'}. ${detail.descriptionEn ?? detail.description ?? ''}`.slice(0, 240);
+  const prScore = ai?.priority ?? p.score;
+  const deptName = ai?.department && ai.department !== 'Unclassified' ? ai.department : detail.department?.en ?? bi('Department', 'విభాగం');
+  const orders: string[] = ai?.relevantOrders?.length ? ai.relevantOrders : [
+    bi('AP Public Services Guarantee Act, 2017 — service SLA timelines', 'AP పబ్లిక్ సర్వీసెస్ గ్యారంటీ చట్టం, 2017'),
+    bi('Citizen Charter — acknowledgement & redressal obligations', 'పౌర చార్టర్ — పరిష్కార బాధ్యతలు'),
+  ];
   return (
     <div className="aibox">
+      {/* AI root-cause analysis (real AI when ANTHROPIC_API_KEY is set) */}
       <div className="aiseg">
-        <div className="lab"><Icon name="doc" />{bi('Case summary', 'కేసు సారాంశం')}</div>
-        <div className="ai-summary">{summary}</div>
+        <div className="lab"><Icon name="sparkle" />{bi('Root-cause analysis', 'మూల కారణ విశ్లేషణ')}
+          {ai?.source && <span style={{ marginLeft: 'auto', fontFamily: "'IBM Plex Mono',monospace", color: ai.source === 'claude' ? '#E7C988' : '#8FA6D6' }}>{ai.source === 'claude' ? 'Claude' : 'heuristic'}</span>}
+        </div>
+        {aiBusy && <div className="ai-summary">{bi('Analysing the complaint…', 'ఫిర్యాదును విశ్లేషిస్తోంది…')}</div>}
+        {ai && <div className="ai-summary" style={{ marginBottom: 8 }}>{ai.summary}</div>}
+        {ai?.rootCauses?.map((rc: any, i: number) => (
+          <div className="suggest" key={i} style={{ marginTop: 7 }}>
+            <div className="ic"><Icon name="alert" /></div>
+            <div className="tx"><strong>{rc.cause}</strong><span>{bi('likely cause', 'సంభావ్య కారణం')} · {rc.likelihood}</span></div>
+          </div>
+        ))}
       </div>
+      {/* Suggested next actions */}
+      {ai?.suggestedActions?.length > 0 && (
+        <div className="aiseg">
+          <div className="lab"><Icon name="check2" />{bi('Suggested next actions', 'సూచించిన చర్యలు')}</div>
+          {ai.suggestedActions.map((s: string, i: number) => (
+            <div className="lawitem" key={i}><Icon name="check2" /><span>{s}</span></div>
+          ))}
+        </div>
+      )}
       <div className="aiseg">
         <div className="lab"><Icon name="route" />{bi('Routing & priority', 'రూటింగ్ & ప్రాధాన్యత')}</div>
-        <div className="suggest"><div className="ic"><Icon name="route" /></div><div className="tx"><strong>{detail.department?.en ?? bi('Department', 'విభాగం')}</strong><span>{bi('lowest competent officer · ', 'తక్కువ సమర్థ అధికారి · ')}{detail.mandal ?? ''}</span></div><span className="conf">{conf}%</span></div>
+        <div className="suggest"><div className="ic"><Icon name="route" /></div><div className="tx"><strong>{deptName}</strong><span>{bi('lowest competent officer · ', 'తక్కువ సమర్థ అధికారి · ')}{detail.mandal ?? ''}</span></div><span className="conf">{conf}%</span></div>
         <div style={{ height: 8 }} />
-        <div className="suggest"><div className="ic"><Icon name="alert" /></div><div className="tx"><strong>{bi(`Priority ${p.score} / 100`, `ప్రాధాన్యత ${p.score} / 100`)}</strong><span>{bi(`${p.label.en.toLowerCase()} · explainable score`, 'వివరించదగిన స్కోర్')}</span></div></div>
+        <div className="suggest"><div className="ic"><Icon name="alert" /></div><div className="tx"><strong>{bi(`Priority ${prScore} / 100`, `ప్రాధాన్యత ${prScore} / 100`)}</strong><span>{bi('explainable score', 'వివరించదగిన స్కోర్')}</span></div></div>
       </div>
       <div className="aiseg">
         <div className="lab"><Icon name="scale" />{bi('Relevant orders & rules (RAG)', 'సంబంధిత ఉత్తర్వులు & నియమాలు (RAG)')}</div>
-        <div className="lawitem"><Icon name="doc" /><span>{bi('AP Public Services Guarantee Act, 2017 — service SLA timelines', 'AP పబ్లిక్ సర్వీసెస్ గ్యారంటీ చట్టం, 2017 — సేవా SLA గడువులు')}</span></div>
-        <div className="lawitem"><Icon name="doc" /><span>{bi(`${detail.department?.en ?? 'Department'} field manual — standard operating procedure`, `${detail.department?.en ?? 'విభాగం'} ఫీల్డ్ మాన్యువల్ — ప్రామాణిక విధానం`)}</span></div>
-        <div className="lawitem"><Icon name="doc" /><span>{bi('Citizen Charter — acknowledgement & redressal obligations', 'పౌర చార్టర్ — పరిష్కార బాధ్యతలు')}</span></div>
+        {orders.map((o, i) => (<div className="lawitem" key={i}><Icon name="doc" /><span>{o}</span></div>))}
       </div>
       <div className="aiseg">
         <div className="lab"><Icon name="trend" />{bi('SLA breach risk', 'SLA ఉల్లంఘన ప్రమాదం')}</div>

@@ -1,5 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { Status } from '../../common/constants';
+import { aiEnabled, callClaude, extractJson } from './anthropic.client';
+import { DEPARTMENT_KB, departmentBriefing, matchDepartment } from './ai-knowledge';
+
+export interface AiAnalysis {
+  summary: string;
+  department: string;
+  deptId: string | null;
+  category: 'FINANCE' | 'NON_FINANCE';
+  priority: number; // 0..100
+  rootCauses: { cause: string; likelihood: 'high' | 'medium' | 'low' }[];
+  suggestedActions: string[];
+  relevantOrders: string[];
+  slaHint: string;
+  confidence: number; // 0..1
+  source: 'claude' | 'heuristic';
+}
 
 /**
  * LLM assist, pilot implementation (Blueprint D.5).
@@ -106,6 +122,112 @@ export class LlmService {
       draft = `Resolution summary (${subject}${place}):\n${facts || '- Corrective action completed and verified.'}\nOutcome communicated to the petitioner for confirmation.`;
     }
     return { draft, aiGenerated: true, requiresHumanApproval: true };
+  }
+
+  /**
+   * Analyse a grievance: identify the likely department, the ROOT CAUSE, suggested
+   * next actions and the governing orders. Uses Claude when ANTHROPIC_API_KEY is
+   * set (grounded in the department knowledge base), else a heuristic from the same
+   * KB. ANALYSIS ONLY — the officer always decides; the AI never closes a case.
+   */
+  async analyzeComplaint(input: {
+    text: string;
+    descriptionEn?: string | null;
+    language?: string;
+    mandal?: string | null;
+    district?: string | null;
+    category?: string | null;
+    deptHint?: string | null;
+  }): Promise<AiAnalysis> {
+    const text = (input.descriptionEn || input.text || '').trim();
+
+    if (aiEnabled()) {
+      const system =
+        `You are "Saarthi", an AI co-pilot for a senior Andhra Pradesh district grievance-redressal officer. ` +
+        `You ANALYSE a citizen grievance and propose how to resolve it. You NEVER decide, assign or close a case — ` +
+        `an officer always acts on your suggestion. Be specific, practical and grounded in the departments and orders below; ` +
+        `do not invent schemes or orders. Identify the most likely ROOT CAUSE(S).\n\n` +
+        `DEPARTMENTS UNDER THE AP PUBLIC GRIEVANCE REDRESSAL SYSTEM:\n${departmentBriefing()}\n\n` +
+        `Return ONLY a JSON object with keys: summary (1-2 sentences), department (name), deptId (one of ` +
+        `${DEPARTMENT_KB.map((d) => d.deptId).join(', ')} or null), category ("FINANCE"|"NON_FINANCE"), ` +
+        `priority (0-100 integer; weigh severity, people affected, vulnerability, time-sensitivity), ` +
+        `rootCauses (array of {cause, likelihood:"high"|"medium"|"low"}, most likely first, max 4), ` +
+        `suggestedActions (array of concrete next steps the officer should take, max 5), ` +
+        `relevantOrders (array of the governing acts/GOs/SLAs that apply, max 4), ` +
+        `slaHint (string), confidence (0-1).`;
+      const user =
+        `Grievance (language=${input.language ?? 'te'}):\n"""${text}"""\n` +
+        `Location: ${[input.mandal, input.district].filter(Boolean).join(', ') || 'unknown'}.` +
+        (input.deptHint ? ` Operator hint: department ${input.deptHint}.` : '') +
+        `\nAnalyse and return the JSON.`;
+      const reply = await callClaude({ system, user, maxTokens: 900, temperature: 0.2 });
+      const parsed = reply ? extractJson<Partial<AiAnalysis>>(reply) : null;
+      if (parsed && parsed.summary) {
+        return this.normalize({ ...parsed, source: 'claude' });
+      }
+      // fall through to heuristic on any failure
+    }
+
+    return this.heuristicAnalysis(text, input);
+  }
+
+  private heuristicAnalysis(text: string, input: { mandal?: string | null; category?: string | null; deptHint?: string | null }): AiAnalysis {
+    const kb =
+      DEPARTMENT_KB.find((d) => d.deptId === input.deptHint) || matchDepartment(text) || null;
+    const t = text.toLowerCase();
+    const urgent = /(emergency|urgent|danger|no water|days|elderly|child|fire|live wire|outbreak|collapse|ప్రాణ|అత్యవసర|ప్రమాద)/.test(t);
+    let priority = 45;
+    if (kb?.category === 'FINANCE' || input.category === 'FINANCE') priority += 12;
+    if (urgent) priority += 25;
+    if (/(\d{2,})\s*(families|people|households|మంది)/.test(t)) priority += 10;
+    priority = Math.max(20, Math.min(95, priority));
+
+    if (!kb) {
+      return this.normalize({
+        summary: 'Could not confidently map this to a department from keywords — needs operator categorisation.',
+        department: 'Unclassified', deptId: null, category: (input.category as any) || 'NON_FINANCE',
+        priority, rootCauses: [{ cause: 'Insufficient detail to determine the root cause; field enquiry needed.', likelihood: 'medium' }],
+        suggestedActions: ['Categorise the grievance to the correct department.', 'Call the citizen (1902) to gather missing details.', 'Record a field-enquiry note.'],
+        relevantOrders: ['AP Public Services Guarantee Act, 2017'], slaHint: 'Acknowledge within 24 hours.',
+        confidence: 0.35, source: 'heuristic',
+      });
+    }
+    return this.normalize({
+      summary: `Likely a ${kb.name} grievance${input.mandal ? ` in ${input.mandal}` : ''}. ${urgent ? 'Time-sensitive.' : ''}`.trim(),
+      department: kb.name, deptId: kb.deptId, category: kb.category,
+      priority,
+      rootCauses: kb.rootCauses.slice(0, 3).map((c, i) => ({ cause: c, likelihood: i === 0 ? 'high' : i === 1 ? 'medium' : 'low' })),
+      suggestedActions: [
+        `Route to ${kb.name} (lowest competent officer for the mandal).`,
+        'Verify the citizen-side facts via X-Road before field action.',
+        `Conduct field enquiry and record corrective action; restore within ~${kb.slaDays} days.`,
+        'Update the citizen by SMS and seek closure confirmation.',
+      ],
+      relevantOrders: kb.orders.slice(0, 4),
+      slaHint: `Department SLA ≈ ${kb.slaDays} days.`,
+      confidence: 0.55, source: 'heuristic',
+    });
+  }
+
+  private normalize(a: Partial<AiAnalysis> & { source: 'claude' | 'heuristic' }): AiAnalysis {
+    const cat = a.category === 'FINANCE' ? 'FINANCE' : 'NON_FINANCE';
+    const pr = Math.max(0, Math.min(100, Math.round(Number(a.priority ?? 50))));
+    return {
+      summary: a.summary || 'Grievance analysed.',
+      department: a.department || 'Unclassified',
+      deptId: a.deptId ?? null,
+      category: cat,
+      priority: pr,
+      rootCauses: (a.rootCauses ?? []).slice(0, 4).map((r) => ({
+        cause: String((r as any).cause ?? r),
+        likelihood: (['high', 'medium', 'low'].includes((r as any).likelihood) ? (r as any).likelihood : 'medium'),
+      })),
+      suggestedActions: (a.suggestedActions ?? []).slice(0, 5).map(String),
+      relevantOrders: (a.relevantOrders ?? []).slice(0, 4).map(String),
+      slaHint: a.slaHint || '',
+      confidence: Math.max(0, Math.min(1, Number(a.confidence ?? 0.5))),
+      source: a.source,
+    };
   }
 }
 

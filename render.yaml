@@ -25,8 +25,16 @@ services:
       # "false" once a real SMS provider is wired up.
       - key: EXPOSE_MOCK_OTP
         value: "true"
+      # Real AI analysis (root cause + pro suggestions). Add your Anthropic key in
+      # the Render dashboard to switch from the built-in heuristic to live Claude.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: "claude-haiku-4-5-20251001"
     # For data that survives redeploys, add a disk and set DATABASE_URL to a path
-    # on it (otherwise the seeded demo db is re-created from the image each deploy):
+    # on it (otherwise the seeded demo db is re-created from the image each deploy).
+    # NOTE: Render disks need a paid instance; on free tier use an external managed
+    # Postgres (Neon/Supabase) and switch the Prisma provider for true persistence.
     # disk:
     #   name: praja-data
     #   mountPath: /app/prisma

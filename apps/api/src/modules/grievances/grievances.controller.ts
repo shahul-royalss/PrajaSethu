@@ -170,6 +170,13 @@ export class GrievancesController {
     return this.grievances.draftAssist(id, dto.kind as any);
   }
 
+  // AI complaint analysis (root cause + suggestions) — advisory only.
+  @RequireRoles(Roles.OFFICER, Roles.SUPERVISOR, Roles.COLLECTOR, Roles.AUDITOR, Roles.DA)
+  @Post(':id/ai-analysis')
+  aiAnalysis(@Param('id') id: string) {
+    return this.grievances.aiAnalysis(id);
+  }
+
   // ── Officer-initiated reopen (e.g. quality audit found a bad closure) ──────
   @RequireRoles(Roles.SUPERVISOR, Roles.COLLECTOR, Roles.AUDITOR)
   @Post(':id/reopen')

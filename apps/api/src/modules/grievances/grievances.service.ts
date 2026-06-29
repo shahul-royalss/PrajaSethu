@@ -66,23 +66,48 @@ export class GrievancesService {
     const descriptionEn = language === 'te' ? (await this.bhashini.nmt(description, 'te', 'en')).text : description;
 
     // 3) Resolve / create the petitioner (Aadhaar tokenised, never raw).
-    const citizen = await this.identity.resolveCitizen({
-      aadhaar: dto.aadhaar,
-      mobile: dto.mobile,
-      name: dto.name,
-      coName: dto.coName,
-      dob: dto.dob,
-      gender: dto.gender,
-      houseNo: dto.houseNo,
-      habitation: dto.habitation,
-      village: dto.village,
-      mandal: dto.mandal,
-      district: dto.district,
-      secretariatCode: dto.secretariatCode,
-      applicantType: dto.applicantType,
-      languagePref: language,
-      vulnerabilityFlags: dto.vulnerabilityFlags,
-    });
+    // If a CITIZEN is signed in, attribute to THEM (by JWT id), never to a mobile
+    // typed into the form — so the complaint always shows in their "my complaints"
+    // and is visible across every device they sign in from. The assisted path
+    // (DA/officer) and anonymous intake still resolve by mobile/Aadhaar.
+    let citizen = null as Awaited<ReturnType<typeof this.identity.resolveCitizen>> | null;
+    if (actor?.kind === 'CITIZEN' && actor.sub) {
+      citizen = await this.identity.attachToCitizen(actor.sub, {
+        aadhaar: dto.aadhaar,
+        name: dto.name,
+        coName: dto.coName,
+        dob: dto.dob,
+        gender: dto.gender,
+        houseNo: dto.houseNo,
+        habitation: dto.habitation,
+        village: dto.village,
+        mandal: dto.mandal,
+        district: dto.district,
+        secretariatCode: dto.secretariatCode,
+        applicantType: dto.applicantType,
+        languagePref: language,
+        vulnerabilityFlags: dto.vulnerabilityFlags,
+      });
+    }
+    if (!citizen) {
+      citizen = await this.identity.resolveCitizen({
+        aadhaar: dto.aadhaar,
+        mobile: dto.mobile,
+        name: dto.name,
+        coName: dto.coName,
+        dob: dto.dob,
+        gender: dto.gender,
+        houseNo: dto.houseNo,
+        habitation: dto.habitation,
+        village: dto.village,
+        mandal: dto.mandal,
+        district: dto.district,
+        secretariatCode: dto.secretariatCode,
+        applicantType: dto.applicantType,
+        languagePref: language,
+        vulnerabilityFlags: dto.vulnerabilityFlags,
+      });
+    }
 
     // 4) NLP: classify (suggestion), distress, dedup.
     const [suggestion, distress, duplicate] = await Promise.all([
@@ -533,6 +558,20 @@ export class GrievancesService {
     const subject = g.subjectId ? await this.prisma.subject.findUnique({ where: { id: g.subjectId } }) : null;
     const facts = g.workLogs.filter((w) => w.noteEn).map((w) => w.noteEn!).slice(-3);
     return this.llm.draftAssist({ kind, subjectEn: subject?.nameEn, mandal: g.mandal, facts });
+  }
+
+  /** AI analysis: likely department, root cause, suggested actions, governing orders. */
+  async aiAnalysis(id: string) {
+    const g = await this.getOrThrow(id);
+    return this.llm.analyzeComplaint({
+      text: g.description,
+      descriptionEn: g.descriptionEn,
+      language: g.language,
+      mandal: g.mandal,
+      district: g.district,
+      category: g.category,
+      deptHint: g.deptId,
+    });
   }
 
   // ── Queries ───────────────────────────────────────────────────────────────

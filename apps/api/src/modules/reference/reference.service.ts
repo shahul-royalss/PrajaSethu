@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DataExchangeService } from '../dataexchange/dataexchange.service';
 import { parseJson } from '../../common/util';
+import { AP_DISTRICTS, AP_DISTRICTS_MANDALS, VILLAGES_BY_MANDAL } from './ap-geography';
 
 @Injectable()
 export class ReferenceService {
@@ -50,21 +51,13 @@ export class ReferenceService {
     return this.dataExchange.listServices();
   }
 
-  // Lightweight geography for the form's location pickers (pilot = Kuppam, Chittoor).
+  // Full Andhra Pradesh geography (26 districts + mandals) for the form's location
+  // pickers. Village/ward is free text in the form.
   geography() {
     return {
-      districts: [
-        'Chittoor', 'Annamayya', 'Tirupati', 'Anantapur', 'Sri Sathya Sai',
-        'YSR Kadapa', 'Nellore', 'Prakasam', 'Guntur', 'Krishna', 'NTR',
-        'East Godavari', 'West Godavari', 'Visakhapatnam', 'Srikakulam',
-      ],
-      mandalsByDistrict: {
-        Chittoor: ['Kuppam', 'Ramakuppam', 'Santhipuram', 'Gudupalle', 'Palamaner'],
-      },
-      villagesByMandal: {
-        Kuppam: ['Kuppam', 'Gudupalle', 'Sakrayapeta', 'Ramakuppam', 'Cheldiganipalle', 'Other'],
-        Ramakuppam: ['Ramakuppam', 'Veeraksamakkapalle', 'Gangadasanapalle', 'Other'],
-      },
+      districts: AP_DISTRICTS,
+      mandalsByDistrict: AP_DISTRICTS_MANDALS,
+      villagesByMandal: VILLAGES_BY_MANDAL,
     };
   }
 }

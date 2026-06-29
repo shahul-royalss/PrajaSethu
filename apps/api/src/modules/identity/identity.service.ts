@@ -88,4 +88,61 @@ export class IdentityService {
       },
     });
   }
+
+  /**
+   * Attribution-safe path for an AUTHENTICATED citizen. The petitioner is the
+   * signed-in citizen (by id from the JWT) — NEVER re-resolved from a mobile typed
+   * into the form — so a complaint always lands in that citizen's "my complaints"
+   * (and is visible on every device they sign in from with the same number). The
+   * form fields only enrich the existing profile. Returns null if the id is stale.
+   */
+  async attachToCitizen(citizenId: string, input: {
+    aadhaar?: string;
+    name?: string;
+    coName?: string;
+    dob?: string;
+    gender?: string;
+    houseNo?: string;
+    habitation?: string;
+    village?: string;
+    mandal?: string;
+    district?: string;
+    secretariatCode?: string;
+    applicantType?: string;
+    languagePref?: string;
+    vulnerabilityFlags?: string[];
+  }) {
+    const existing = await this.prisma.citizen.findUnique({ where: { id: citizenId } });
+    if (!existing) return null;
+
+    const profile = {
+      name: input.name,
+      coName: input.coName,
+      dob: input.dob,
+      gender: input.gender,
+      houseNo: input.houseNo,
+      habitation: input.habitation,
+      village: input.village,
+      mandal: input.mandal,
+      district: input.district,
+      secretariatCode: input.secretariatCode,
+      applicantType: input.applicantType,
+      languagePref: input.languagePref,
+      ...(input.vulnerabilityFlags ? { vulnerabilityFlags: JSON.stringify(input.vulnerabilityFlags) } : {}),
+    };
+    const defined = Object.fromEntries(Object.entries(profile).filter(([, v]) => v !== undefined));
+
+    let aadhaarToken: string | undefined;
+    if (input.aadhaar && !existing.aadhaarToken) {
+      const tok = this.tokenize(input.aadhaar).token;
+      // Don't collide with another citizen already holding this token.
+      const clash = await this.prisma.citizen.findUnique({ where: { aadhaarToken: tok } });
+      if (!clash) aadhaarToken = tok;
+    }
+
+    return this.prisma.citizen.update({
+      where: { id: citizenId },
+      data: { ...defined, ...(aadhaarToken ? { aadhaarToken } : {}) },
+    });
+  }
 }
