@@ -38,8 +38,7 @@ services:
         value: "3000"
       - key: NEXT_PUBLIC_API_BASE
         value: "/api"
+      # Deterministic literal (service name is fixed above), so it never depends on
+      # Render's fromService resolution. The web server proxies /api/* here.
       - key: API_PROXY_TARGET
-        fromService:
-          type: web
-          name: praja-setu-api
-          property: host
+        value: "https://praja-setu-api.onrender.com"
