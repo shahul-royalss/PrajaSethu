@@ -27,6 +27,14 @@ sign-in → a role-based hub that shows the officer's **government designation**
 officer to only the workspaces their role allows. Officers can **compress uploaded image evidence** at the workbench and
 run **detailed, consent-gated X-Road** verifications across departments. The public tracking ID is **`PGRS-…`**.
 
+**Command console ("Calm command center").** Staff sign-in opens a unified, navy + antique-gold console whose signature
+element is a persistent **AI co-pilot** (it summarises, routes, retrieves the governing orders and estimates SLA-breach
+risk — but the **officer always decides**). It carries four production-grade dashboards — **District Command Center**
+(KPIs · grievance-flow chart · co-pilot insights · department/SLA charts · live grievances table), **Officer AI
+Workbench** (queue · complaint detail with voice transcript, evidence & notarised ledger timeline · co-pilot rail),
+**GIS Intelligence & Hotspots**, and **Analytics & Predictions** — plus All-Grievances, Audit & Ledger, Citizens and
+Administration. Charts use Chart.js; the whole console is bilingual **EN ⇄ తెలుగు** and wired to live pilot data.
+
 ### Screenshots
 
 | Citizen tracking | Collector command centre |
