@@ -39,7 +39,9 @@ async function handler(req: NextRequest, ctx: { params: Promise<{ path: string[]
 
   // Ride out a sleeping/free-tier API: gateway 502/503/504 and connection errors
   // mean the request never reached the app, so retrying is safe (even for POST).
-  const MAX = 6;
+  // The backoff sums to ~47s (under maxDuration=60) so a full cold start (30–60s)
+  // is absorbed here and never surfaces to the citizen as an error.
+  const MAX = 11;
   for (let attempt = 1; attempt <= MAX; attempt++) {
     let res: Response | null = null;
     try {
@@ -59,7 +61,7 @@ async function handler(req: NextRequest, ctx: { params: Promise<{ path: string[]
     }
 
     if (res) console.error(`[api-proxy] attempt ${attempt} gateway ${res.status} ← ${dest} (API waking?)`);
-    if (attempt < MAX) await sleep(attempt <= 2 ? 2000 : 5000); // ~2,2,5,5,5s ≈ 19s
+    if (attempt < MAX) await sleep(attempt <= 2 ? 2000 : 5000); // ~2,2,5×8 ≈ 47s
   }
 
   return new Response(
