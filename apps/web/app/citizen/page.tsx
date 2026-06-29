@@ -77,6 +77,7 @@ function CitizenLogin({ onLoggedIn }: { onLoggedIn: (token: string, c: CitizenUs
     try {
       const r = await api.post<{ devCode?: string }>('/auth/citizen/request-otp', { mobile });
       setDevCode(r.devCode ?? null);
+      if (r.devCode) setCode(r.devCode); // demo: prefill so login is one tap
       setStep('otp');
     } catch (e) {
       setError((e as Error).message);
@@ -135,7 +136,8 @@ function CitizenLogin({ onLoggedIn }: { onLoggedIn: (token: string, c: CitizenUs
               <p className="text-sm text-slate-600">{t('otpSent')} ({mobile})</p>
               {devCode && (
                 <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
-                  Demo OTP: <b className="font-mono">{devCode}</b>
+                  🧪 Demo mode (no SMS is sent) — your code is{' '}
+                  <b className="font-mono">{devCode}</b>, already filled in. Just tap Verify.
                 </p>
               )}
               <input

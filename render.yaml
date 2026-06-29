@@ -20,6 +20,11 @@ services:
         value: "*"
       - key: JWT_SECRET
         generateValue: true
+      # Pilot demo has no real SMS gateway — surface the generated OTP in the API
+      # response so the citizen sign-in screen can show "Demo OTP: ……". Set to
+      # "false" once a real SMS provider is wired up.
+      - key: EXPOSE_MOCK_OTP
+        value: "true"
     # For data that survives redeploys, add a disk and set DATABASE_URL to a path
     # on it (otherwise the seeded demo db is re-created from the image each deploy):
     # disk:
