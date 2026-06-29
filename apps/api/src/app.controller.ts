@@ -13,8 +13,8 @@ export class AppController {
   @Get()
   root() {
     return {
-      name: 'Praja Setu — Pilot API',
-      description: 'Next-generation Public Grievance Redressal System (pilot).',
+      name: 'SAARTHI — Pilot API',
+      description: 'Public Grievance Redressal System — Government of India (pilot).',
       docs: 'See docs/PrajaSetu-Blueprint.md and README.md',
       health: '/health',
     };

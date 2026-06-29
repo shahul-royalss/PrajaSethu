@@ -20,6 +20,7 @@ import { RoutingModule } from './modules/routing/routing.module';
 import { SlaModule } from './modules/sla/sla.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { GrievancesModule } from './modules/grievances/grievances.module';
+import { AttachmentsModule } from './modules/attachments/attachments.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { ReferenceModule } from './modules/reference/reference.module';
@@ -44,6 +45,7 @@ import { ReferenceModule } from './modules/reference/reference.module';
     SlaModule,
     NotificationModule,
     GrievancesModule,
+    AttachmentsModule,
     DashboardModule,
     AuditModule,
     ReferenceModule,

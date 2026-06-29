@@ -1,8 +1,10 @@
-# Praja Setu — ప్రజా సేతు
+# SAARTHI — Public Grievance Redressal · Government of India
 
-**A working pilot of the next-generation Public Grievance Redressal System (PGRS) for Andhra Pradesh**, built from
-[`docs/PrajaSetu-Blueprint.md`](docs/PrajaSetu-Blueprint.md). Telugu-first, voice-first, tamper-evident, and designed to
-run in a single mandal/town before scaling to the state.
+**A working pilot of a next-generation Public Grievance Redressal System (PGRS)**, built from
+[`docs/PrajaSetu-Blueprint.md`](docs/PrajaSetu-Blueprint.md). **SAARTHI** ("guide / charioteer") is multilingual-first,
+voice-first, and tamper-evident — designed to run in a single mandal/town before scaling. The brandmark is a charioteer's
+wheel (chakra), and the system asks every citizen to **choose their language first**, then conducts the whole
+grievance interview in that language by voice or text.
 
 This repository is the **pilot MVP** the blueprint calls for in Part H — the deliberately narrow cut that proves value
 and safety small. It compiles and runs end-to-end with **zero external services** (one command, SQLite, in-process
@@ -17,10 +19,13 @@ adapters), so you can see the whole grievance lifecycle work today.
 | `apps/api` | **NestJS 10 · Prisma · SQLite** | Core grievance services as a modular monolith (the blueprint's recommended pilot shape) |
 | `apps/web` | **Next.js 15 · React 19 · Tailwind** | Two portals (Citizen + Official), the six role-tuned surfaces (Part F), **12 Indian languages**, and a voice-first step-by-step filing form |
 
-**Citizen vs Official.** The landing splits into a **Citizen** portal (mobile-OTP sign-in → dashboard → a guided,
-one-question-at-a-time complaint form with **speak-to-fill + read-aloud** so low-literacy users can file unaided, in any
-of 12 Indian languages) and an **Official** portal (single sign-in → a role-based hub routing each officer to only the
-workspaces their role allows). The public tracking ID is **`PGRS-…`** (the prior `YSR` branding was retired).
+**Single login, two roles.** The landing first asks the citizen to **pick their language**, then shows one sign-in card:
+**Citizen login** (mobile-OTP → dashboard → a guided, one-question-at-a-time complaint form with **speak-to-fill +
+repeatable read-aloud + document upload** so low-literacy users can file unaided, in any of 12 Indian languages with the
+transcript in their **native script**). A **Staff login** toggle (top-right of the same card) flips it to officer
+sign-in → a role-based hub that shows the officer's **government designation** and the escalation ladder, and routes each
+officer to only the workspaces their role allows. Officers can **compress uploaded image evidence** at the workbench and
+run **detailed, consent-gated X-Road** verifications across departments. The public tracking ID is **`PGRS-…`**.
 
 ### Screenshots
 

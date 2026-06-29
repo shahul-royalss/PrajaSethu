@@ -9,6 +9,8 @@ interface ServiceDef {
   member: string; // owning department's X-Road member
   deptId: string; // dept whose data is pulled (consent is checked against this)
   label: string;
+  category: string;
+  description: string;
   fact: (g: any) => Record<string, unknown>;
 }
 
@@ -22,38 +24,62 @@ interface ServiceDef {
  */
 @Injectable()
 export class DataExchangeService {
-  private readonly OWN_MEMBER = 'AP/GOV/PRAJA-SETU';
+  private readonly OWN_MEMBER = 'IN/GOV/SAARTHI';
 
   private readonly services: Record<string, ServiceDef> = {
     ration_status_by_token: {
-      member: 'AP/GOV/CIVIL-SUPPLIES',
-      deptId: 'CS',
+      member: 'AP/GOV/CIVIL-SUPPLIES', deptId: 'CS', category: 'Civil Supplies',
       label: 'Ration card status',
-      fact: () => ({ rationCard: 'ACTIVE', cardType: 'RICE_CARD', lastDistribution: '2026-06-01' }),
+      description: 'Verify a ration card is active and its last PDS distribution.',
+      fact: () => ({ rationCard: 'ACTIVE', cardType: 'RICE_CARD', members: 4, lastDistribution: '2026-06-01' }),
     },
     pension_status: {
-      member: 'AP/GOV/PENSIONS',
-      deptId: 'PEN',
+      member: 'AP/GOV/PENSIONS', deptId: 'PEN', category: 'Pensions',
       label: 'Pension status',
-      fact: () => ({ pension: 'ACTIVE', scheme: 'YSR_PENSION_KANUKA', lastPaid: '2026-06-01' }),
+      description: 'Confirm pension scheme enrolment and last disbursement.',
+      fact: () => ({ pension: 'ACTIVE', scheme: 'NTR_BHAROSA_PENSION', amount: 3000, lastPaid: '2026-06-01' }),
     },
     power_connection_status: {
-      member: 'AP/GOV/APSPDCL',
-      deptId: 'ENERGY',
+      member: 'AP/GOV/APSPDCL', deptId: 'ENERGY', category: 'Energy',
       label: 'Power connection status',
-      fact: () => ({ connection: 'ACTIVE', lastBilled: '2026-06-10', outageReported: true }),
+      description: 'Service number status, last bill and reported outages.',
+      fact: () => ({ connection: 'ACTIVE', serviceNo: 'KPM-114520', lastBilled: '2026-06-10', outageReported: true }),
     },
     land_record_status: {
-      member: 'AP/GOV/REVENUE',
-      deptId: 'REVENUE',
+      member: 'AP/GOV/REVENUE', deptId: 'REVENUE', category: 'Revenue / Land',
       label: 'Land record / mutation status',
-      fact: () => ({ mutation: 'PENDING_FIELD_VERIFICATION', surveyNo: '123/4A' }),
+      description: 'Webland survey number, ownership and mutation stage.',
+      fact: () => ({ mutation: 'PENDING_FIELD_VERIFICATION', surveyNo: '123/4A', extentAcres: 1.5 }),
     },
     water_scheme_status: {
-      member: 'AP/GOV/RWS',
-      deptId: 'RWS',
+      member: 'AP/GOV/RWS', deptId: 'RWS', category: 'Rural Water',
       label: 'Rural water scheme status',
+      description: 'Drinking-water scheme/source status and last servicing.',
       fact: () => ({ scheme: 'ACTIVE', source: 'BOREWELL', lastServiced: '2026-05-20' }),
+    },
+    aadhaar_demographic: {
+      member: 'INDIA/UIDAI/EKYC', deptId: 'CS', category: 'Identity (UIDAI)',
+      label: 'Aadhaar eKYC (name/age/address match)',
+      description: 'Tokenised yes/no demographic match via UIDAI — no raw Aadhaar exchanged.',
+      fact: () => ({ nameMatch: true, addressMatch: true, ageBand: '45-60', kycVerified: true }),
+    },
+    digilocker_documents: {
+      member: 'INDIA/MEITY/DIGILOCKER', deptId: 'REVENUE', category: 'Documents (DigiLocker)',
+      label: 'DigiLocker issued documents',
+      description: 'List of citizen-issued verified documents (caste, income, RoR).',
+      fact: () => ({ documents: ['INCOME_CERTIFICATE', 'CASTE_CERTIFICATE', 'ROR_1B'], verified: true }),
+    },
+    cctns_complaint_status: {
+      member: 'AP/POLICE/CCTNS', deptId: 'VIG', category: 'Police (CCTNS)',
+      label: 'CCTNS complaint / FIR status',
+      description: 'Cross-check any linked police complaint (confidential).',
+      fact: () => ({ firLinked: false, petitions: 0, status: 'NONE' }),
+    },
+    municipal_property_tax: {
+      member: 'AP/GOV/MUNICIPAL', deptId: 'REVENUE', category: 'Municipal',
+      label: 'Municipal property tax status',
+      description: 'Property assessment number and dues.',
+      fact: () => ({ assessmentNo: 'KPM-PT-88231', duesRupees: 0, status: 'PAID' }),
     },
   };
 
@@ -64,7 +90,9 @@ export class DataExchangeService {
   ) {}
 
   listServices() {
-    return Object.entries(this.services).map(([id, s]) => ({ id, member: s.member, deptId: s.deptId, label: s.label }));
+    return Object.entries(this.services).map(([id, s]) => ({
+      id, member: s.member, deptId: s.deptId, label: s.label, category: s.category, description: s.description,
+    }));
   }
 
   async lookup(input: { grievanceId: string; service: string; requestedByRole: string; requestedById: string }) {

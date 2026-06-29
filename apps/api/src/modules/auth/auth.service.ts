@@ -31,6 +31,7 @@ export class AuthService {
       sub: officer.id,
       kind: 'OFFICER',
       role: officer.role,
+      designation: officer.designation,
       deptId: officer.deptId,
       level: officer.level,
       jurisdiction: parseJson<{ mandal?: string; secretariatCodes?: string[] }>(officer.jurisdiction, {}),
@@ -38,7 +39,10 @@ export class AuthService {
     };
     return {
       accessToken: await this.jwt.signAsync(payload),
-      officer: { id: officer.id, name: officer.name, role: officer.role, deptId: officer.deptId, level: officer.level },
+      officer: {
+        id: officer.id, name: officer.name, role: officer.role,
+        designation: officer.designation, deptId: officer.deptId, level: officer.level,
+      },
     };
   }
 
@@ -49,7 +53,7 @@ export class AuthService {
     await this.notifications.send({
       to: mobile,
       template: 'OTP',
-      body: `Your Praja Setu OTP is ${code}. Valid 10 minutes.`,
+      body: `Your SAARTHI OTP is ${code}. Valid 10 minutes.`,
     });
     return {
       sent: true,

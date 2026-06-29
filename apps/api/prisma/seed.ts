@@ -92,23 +92,25 @@ async function main() {
   const jKuppam = JSON.stringify({ mandal: PILOT_MANDAL, secretariatCodes: ['AP-KPM-021', 'AP-KPM-022'] });
   const jDistrict = JSON.stringify({});
 
-  type OfficerSeed = { username: string; name: string; role: string; deptId: string | null; level: number; jurisdiction: string };
+  type OfficerSeed = { username: string; name: string; designation: string; role: string; deptId: string | null; level: number; jurisdiction: string };
   const officerSeeds: OfficerSeed[] = [
-    { username: 'da1', name: 'Lakshmi (Digital Assistant)', role: Roles.DA, deptId: null, level: 1, jurisdiction: jKuppam },
-    { username: 'cs.officer', name: 'Tahsildar — Civil Supplies', role: Roles.OFFICER, deptId: 'CS', level: 1, jurisdiction: jKuppam },
-    { username: 'cs.officer2', name: 'Dy. Tahsildar — Civil Supplies', role: Roles.OFFICER, deptId: 'CS', level: 2, jurisdiction: jDistrict },
-    { username: 'pen.officer', name: 'WEA — Pensions', role: Roles.OFFICER, deptId: 'PEN', level: 1, jurisdiction: jKuppam },
-    { username: 'pen.officer2', name: 'MPDO — Pensions', role: Roles.OFFICER, deptId: 'PEN', level: 2, jurisdiction: jDistrict },
-    { username: 'energy.officer', name: 'AE — APSPDCL', role: Roles.OFFICER, deptId: 'ENERGY', level: 1, jurisdiction: jKuppam },
-    { username: 'energy.officer2', name: 'DE — APSPDCL', role: Roles.OFFICER, deptId: 'ENERGY', level: 2, jurisdiction: jDistrict },
-    { username: 'rws.officer', name: 'AE — Rural Water', role: Roles.OFFICER, deptId: 'RWS', level: 1, jurisdiction: jKuppam },
-    { username: 'rws.officer2', name: 'EE — Rural Water', role: Roles.OFFICER, deptId: 'RWS', level: 2, jurisdiction: jDistrict },
-    { username: 'rev.officer', name: 'RI — Revenue', role: Roles.OFFICER, deptId: 'REVENUE', level: 1, jurisdiction: jKuppam },
-    { username: 'rev.officer2', name: 'RDO — Revenue', role: Roles.OFFICER, deptId: 'REVENUE', level: 2, jurisdiction: jDistrict },
-    { username: 'vig.officer', name: 'Vigilance Officer', role: Roles.OFFICER, deptId: 'VIG', level: 2, jurisdiction: jDistrict },
-    { username: 'supervisor', name: 'Mandal Grievance Cell', role: Roles.SUPERVISOR, deptId: null, level: 2, jurisdiction: jKuppam },
-    { username: 'collector', name: 'District Collector', role: Roles.COLLECTOR, deptId: null, level: 4, jurisdiction: jDistrict },
-    { username: 'auditor', name: 'Audit & Anti-Corruption', role: Roles.AUDITOR, deptId: null, level: 3, jurisdiction: jDistrict },
+    { username: 'da1', name: 'Lakshmi', designation: 'Digital Assistant (Sachivalayam)', role: Roles.DA, deptId: null, level: 1, jurisdiction: jKuppam },
+    { username: 'cs.officer', name: 'K. Srinivas', designation: 'Tahsildar — Civil Supplies', role: Roles.OFFICER, deptId: 'CS', level: 2, jurisdiction: jKuppam },
+    { username: 'vro', name: 'M. Ramana', designation: 'Village Revenue Officer (VRO)', role: Roles.OFFICER, deptId: 'REVENUE', level: 1, jurisdiction: jKuppam },
+    { username: 'rev.officer', name: 'P. Anitha', designation: 'Revenue Inspector (RI)', role: Roles.OFFICER, deptId: 'REVENUE', level: 1, jurisdiction: jKuppam },
+    { username: 'rdo', name: 'S. Bhaskar', designation: 'Revenue Divisional Officer (RDO)', role: Roles.SUPERVISOR, deptId: 'REVENUE', level: 3, jurisdiction: jDistrict },
+    { username: 'pen.officer', name: 'G. Padma', designation: 'Welfare & Education Assistant (WEA)', role: Roles.OFFICER, deptId: 'PEN', level: 1, jurisdiction: jKuppam },
+    { username: 'energy.officer', name: 'T. Naresh', designation: 'Assistant Engineer (APSPDCL)', role: Roles.OFFICER, deptId: 'ENERGY', level: 1, jurisdiction: jKuppam },
+    { username: 'energy.officer2', name: 'V. Rao', designation: 'Deputy Engineer (APSPDCL)', role: Roles.OFFICER, deptId: 'ENERGY', level: 2, jurisdiction: jDistrict },
+    { username: 'rws.officer', name: 'B. Kiran', designation: 'Panchayat Secretary / AE (Rural Water)', role: Roles.OFFICER, deptId: 'RWS', level: 1, jurisdiction: jKuppam },
+    { username: 'ee.rws', name: 'D. Sudha', designation: 'Executive Engineer (Rural Water)', role: Roles.SUPERVISOR, deptId: 'RWS', level: 3, jurisdiction: jDistrict },
+    { username: 'cs.officer2', name: 'R. Latha', designation: 'Deputy Tahsildar — Civil Supplies', role: Roles.OFFICER, deptId: 'CS', level: 3, jurisdiction: jDistrict },
+    { username: 'vig.officer', name: 'A. Khan', designation: 'Vigilance & Enforcement Officer', role: Roles.OFFICER, deptId: 'VIG', level: 2, jurisdiction: jDistrict },
+    { username: 'mpdo', name: 'N. Sailaja', designation: 'Mandal Parishad Development Officer (MPDO)', role: Roles.SUPERVISOR, deptId: null, level: 2, jurisdiction: jKuppam },
+    { username: 'supervisor', name: 'Mandal Grievance Cell', designation: 'Mandal Grievance Cell', role: Roles.SUPERVISOR, deptId: null, level: 2, jurisdiction: jKuppam },
+    { username: 'joint.collector', name: 'Smt. Rao', designation: 'Joint Collector', role: Roles.COLLECTOR, deptId: null, level: 4, jurisdiction: jDistrict },
+    { username: 'collector', name: 'Sri Kumar IAS', designation: 'District Collector', role: Roles.COLLECTOR, deptId: null, level: 4, jurisdiction: jDistrict },
+    { username: 'auditor', name: 'Audit Cell', designation: 'District Audit Officer', role: Roles.AUDITOR, deptId: null, level: 3, jurisdiction: jDistrict },
   ];
   const officersByUsername: Record<string, string> = {};
   for (const o of officerSeeds) {
@@ -118,6 +120,7 @@ async function main() {
         passwordHash: hash,
         name: o.name,
         role: o.role,
+        designation: o.designation,
         deptId: o.deptId,
         level: o.level,
         jurisdiction: o.jurisdiction,

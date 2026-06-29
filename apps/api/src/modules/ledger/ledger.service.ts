@@ -69,7 +69,7 @@ export class LedgerService {
         ts: ts.toISOString(),
       }),
     );
-    const ledgerTxId = `fabric://praja-setu/${seq}/${blockHash.slice(0, 16)}`;
+    const ledgerTxId = `fabric://saarthi/${seq}/${blockHash.slice(0, 16)}`;
 
     await this.prisma.auditEvent.create({
       data: {

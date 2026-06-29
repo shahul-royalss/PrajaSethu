@@ -148,7 +148,7 @@ export class GrievancesService {
       grievanceId: grievance.id,
       to: citizen.mobile,
       template: 'ACK',
-      body: `Your grievance is registered. Tracking ID ${ysr}. Track at praja-setu / call 1902.`,
+      body: `Your grievance is registered. Tracking ID ${ysr}. Track on SAARTHI / call 1902.`,
     });
     await this.ledger.append({
       grievanceId: grievance.id,
@@ -666,7 +666,6 @@ export class GrievancesService {
         petitioner: true,
         assignments: { orderBy: { assignedAt: 'desc' }, include: { assignee: true } },
         workLogs: { orderBy: { createdAt: 'asc' }, include: { actor: true } },
-        attachments: true,
         escalations: { orderBy: { createdAt: 'asc' } },
         reopens: { orderBy: { reopenedAt: 'asc' } },
         feedback: true,

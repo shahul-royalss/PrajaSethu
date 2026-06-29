@@ -6,6 +6,7 @@ export interface Officer {
   id: string;
   name: string;
   role: string;
+  designation?: string | null;
   deptId?: string | null;
   level?: number;
 }

@@ -1,14 +1,32 @@
 // Praja Setu — domain constants. SQLite has no native enums, so the allowed
 // values live here and are enforced in code (DTO validators + the state machine).
 
+// Functional capability roles (drive RBAC). A separate free-text `designation`
+// on each officer carries the real government title (Tahsildar, RDO, Collector…).
 export const Roles = {
   DA: 'DA', // Digital Assistant / Volunteer (Sachivalayam operator)
-  OFFICER: 'OFFICER', // Redressal officer
-  SUPERVISOR: 'SUPERVISOR', // Mandal/District grievance cell
-  COLLECTOR: 'COLLECTOR', // Collector / State command centre
-  AUDITOR: 'AUDITOR', // Audit & anti-corruption console
+  OFFICER: 'OFFICER', // Field/redressal officer (VRO, Panchayat Secy, AE, WEA, Tahsildar…)
+  SUPERVISOR: 'SUPERVISOR', // Mandal/District grievance cell (MPDO, RDO, EE…)
+  COLLECTOR: 'COLLECTOR', // Collector / Joint Collector / State command centre
+  AUDITOR: 'AUDITOR', // Vigilance & Enforcement / Audit
 } as const;
 export type Role = (typeof Roles)[keyof typeof Roles];
+
+// Government designations offered at staff sign-in, each mapped to a capability role.
+export const DESIGNATIONS: { username: string; designation: string; role: Role; deptId: string | null; level: number }[] = [
+  { username: 'da1', designation: 'Digital Assistant (Sachivalayam)', role: Roles.DA, deptId: null, level: 1 },
+  { username: 'vro', designation: 'Village Revenue Officer (VRO)', role: Roles.OFFICER, deptId: 'REVENUE', level: 1 },
+  { username: 'panchayat.secy', designation: 'Panchayat Secretary', role: Roles.OFFICER, deptId: 'RWS', level: 1 },
+  { username: 'tahsildar', designation: 'Tahsildar', role: Roles.OFFICER, deptId: 'CS', level: 2 },
+  { username: 'ae.power', designation: 'Assistant Engineer (APSPDCL)', role: Roles.OFFICER, deptId: 'ENERGY', level: 1 },
+  { username: 'wea.pension', designation: 'Welfare & Education Assistant (WEA)', role: Roles.OFFICER, deptId: 'PEN', level: 1 },
+  { username: 'mpdo', designation: 'Mandal Parishad Development Officer (MPDO)', role: Roles.SUPERVISOR, deptId: null, level: 2 },
+  { username: 'rdo', designation: 'Revenue Divisional Officer (RDO)', role: Roles.SUPERVISOR, deptId: 'REVENUE', level: 3 },
+  { username: 'ee.rws', designation: 'Executive Engineer (Rural Water)', role: Roles.SUPERVISOR, deptId: 'RWS', level: 3 },
+  { username: 'joint.collector', designation: 'Joint Collector', role: Roles.COLLECTOR, deptId: null, level: 4 },
+  { username: 'collector', designation: 'District Collector', role: Roles.COLLECTOR, deptId: null, level: 4 },
+  { username: 'vigilance', designation: 'Vigilance & Enforcement Officer', role: Roles.AUDITOR, deptId: 'VIG', level: 3 },
+];
 
 export const Channels = {
   SACHIVALAYAM_ASSISTED: 'SACHIVALAYAM_ASSISTED',

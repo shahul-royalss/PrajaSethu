@@ -3,9 +3,9 @@ import './globals.css';
 import { Providers } from './providers';
 
 export const metadata: Metadata = {
-  title: 'Praja Setu — Public Grievance Redressal (Pilot)',
+  title: 'SAARTHI — Public Grievance Redressal · Government of India',
   description:
-    'Next-generation Public Grievance Redressal System for Andhra Pradesh — Telugu-first, voice-first, tamper-evident. Pilot.',
+    'SAARTHI — a voice-first, multilingual, tamper-evident Public Grievance Redressal System. File and track grievances in your own language. Government of India pilot.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -79,7 +79,8 @@ model Officer {
   username     String  @unique
   passwordHash String
   name         String
-  role         String  // DA | OFFICER | SUPERVISOR | COLLECTOR | AUDITOR
+  role         String  // DA | OFFICER | SUPERVISOR | COLLECTOR | AUDITOR (capability)
+  designation  String? // government title shown in UI (Tahsildar, RDO, Collector…)
   deptId       String?
   level        Int     @default(1) // L1..L4 competence for escalation
   jurisdiction String  @default("{}") // JSON: { mandal, secretariatCodes[] }
@@ -192,10 +193,16 @@ model WorkLog {
 model Attachment {
   id            String   @id @default(cuid())
   grievanceId   String
-  type          String
-  objectStoreKey String
+  type          String   @default("DOCUMENT")
+  filename      String?
+  mime          String?
+  sizeBytes     Int?
+  originalSizeBytes Int?
+  dataBase64    String?  // pilot store (no MinIO) — base64 of the file bytes
+  compressed    Boolean  @default(false)
+  objectStoreKey String?
   ocrText       String?
-  uploadedBy    String?
+  uploadedBy    String?  // CITIZEN | DA | <officerId>
   hash          String?
   createdAt     DateTime @default(now())
 

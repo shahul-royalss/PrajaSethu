@@ -2,9 +2,12 @@
 // in translations.ts provides the same keys; missing keys fall back to English.
 export const en = {
   // brand / common
-  appName: 'Praja Setu',
-  tagline: "People's Bridge — Public Grievance Redressal",
+  appName: 'SAARTHI',
+  tagline: 'Public Grievance Redressal — Guiding Solutions',
+  govOfIndia: 'Government of India',
+  fullName: 'System for Assisted, Accountable & Responsive Tracking of Hearings & Issues',
   selectLanguage: 'Select your language',
+  selectLanguageHelp: 'We will ask every question in the language you choose.',
   language: 'Language',
   continue: 'Continue',
   back: 'Back',
@@ -138,6 +141,53 @@ export const en = {
   why2: 'Tamper-proof record you can verify yourself',
   why3: 'No complaint is closed without your confirmation',
   why4: 'Track every step, get plain-language updates',
+
+  // unified login / landing (v3)
+  startLanguage: 'First, choose your language',
+  startLanguageHelp: 'Every question will be asked in this language. You can change it anytime.',
+  startHere: 'Start here',
+  citizenLogin: 'Citizen login',
+  staffLogin: 'Staff login',
+  citizenLoginHint: 'Login with your mobile number to file or track a complaint.',
+  staffLoginHint: 'Officers & Sachivalayam staff sign in with their work account.',
+  backToCitizen: 'Back to citizen login',
+  continueAs: 'Continue as',
+  trustedBy: 'A Government of India initiative for fair, fast, transparent grievance redressal.',
+  liveStats: 'Live pilot',
+  statResolved: 'Resolved',
+  statOnTime: 'On-time',
+  statLanguages: 'Languages',
+  statTamperProof: 'Tamper-proof',
+
+  // voice (v3)
+  speakNow: 'Speak now',
+  tapMicToSpeak: 'Tap the mic and speak in your language',
+  micDenied: 'Microphone blocked. Allow mic access in your browser, then tap again.',
+  micError: 'Could not hear you. Please try again or type your answer.',
+  micUnsupported: 'Voice typing is not supported on this browser — please type.',
+  listenAgain: 'Listen again',
+  playing: 'Playing…',
+  yourAnswer: 'Your answer',
+
+  // documents (v3)
+  qDocuments: 'Add supporting documents',
+  qDocumentsHelp: 'Photos of bills, letters, ID or the problem. You can skip this.',
+  addDocument: 'Add a document / photo',
+  addPhoto: 'Take or upload a photo',
+  documentsAttached: '{n} document(s) attached',
+  uploading: 'Uploading…',
+  removeDoc: 'Remove',
+  noDocuments: 'No documents added yet',
+
+  // dashboard extras (v3)
+  goodToSee: 'Good to see you',
+  dashboardSubtitle: 'File a new complaint, or check how your existing ones are going.',
+  openComplaints: 'Open',
+  resolvedComplaints: 'Resolved',
+  needsYou: 'Needs your confirmation',
+  quickActions: 'Quick actions',
+  helpTitle: 'Need a hand?',
+  helpDesc: 'Call 1902 (toll-free) or visit your Sachivalayam — staff can file for you.',
 };
 
 export type StringKey = keyof typeof en;

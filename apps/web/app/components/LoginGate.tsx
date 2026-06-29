@@ -13,8 +13,8 @@ interface AuthCtx {
 
 const ROLE_HINT: Record<string, string> = {
   DA: 'da1',
-  OFFICER: 'rws.officer / cs.officer',
-  SUPERVISOR: 'supervisor',
+  OFFICER: 'cs.officer',
+  SUPERVISOR: 'mpdo',
   COLLECTOR: 'collector',
   AUDITOR: 'auditor',
 };
