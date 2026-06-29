@@ -16,7 +16,7 @@ adapters), so you can see the whole grievance lifecycle work today.
 
 | App | Stack | What it is |
 |---|---|---|
-| `apps/api` | **NestJS 10 · Prisma · SQLite** | Core grievance services as a modular monolith (the blueprint's recommended pilot shape) |
+| `apps/api` | **NestJS 10 · Prisma · PostgreSQL** | Core grievance services as a modular monolith; persistent, cross-device data in a managed Postgres (Neon/Supabase/Render) |
 | `apps/web` | **Next.js 15 · React 19 · Tailwind** | Two portals (Citizen + Official), the six role-tuned surfaces (Part F), **12 Indian languages**, and a voice-first step-by-step filing form |
 
 **Single login, two roles.** The landing first asks the citizen to **pick their language**, then shows one sign-in card:
@@ -57,9 +57,9 @@ stand-in, so the whole system runs end-to-end and a real client drops in later w
 | **Tamper-evident ledger** (D.2) | **Real** SHA-256 hash-chained, append-only `AuditEvent` log with citizen "verify integrity" + DB-vs-ledger check. This *is* the blueprint's own sanctioned fallback (K.2). | Hyperledger Fabric chaincode behind `LedgerService` |
 | **X-Road data exchange** (D.1) | Consent-gated, signed, logged cross-department lookups (canned facts) + access-transparency view | X-Road Security Servers behind `DataExchangeService` |
 | **Bhashini NLP** (D.3) | ASR / NMT / TTS adapter (mock); keyword classifier over the seeded taxonomy; Jaccard dedup; distress detection | Bhashini/ULCA APIs behind `BhashiniService`; learned models |
-| **LLM assist** (D.5) | Template-grounded plain-language status + officer draft-assist — read-only, AI-labelled, never decides/closes | RAG-grounded sovereign LLM behind `LlmService` |
+| **LLM assist** (D.5) | Real **Claude** analysis (root cause + suggestions, dept-knowledge grounded) when `ANTHROPIC_API_KEY` is set, else a KB heuristic — read-only, AI-labelled, never decides/closes | RAG-grounded sovereign LLM behind `LlmService` |
 | **Identity** (G.1) | Aadhaar **tokenised, never stored raw**; mobile-OTP login; officer JWT (mock Keycloak) | UIDAI eKYC + Aadhaar Data Vault; Keycloak OIDC + MFA |
-| **Database** | SQLite (zero-setup) | PostgreSQL + pgvector (swap the Prisma provider — see *Scale path*) |
+| **Database** | **PostgreSQL** — persistent, cross-device (managed: Neon/Supabase/Render) | PostgreSQL + pgvector (add embeddings) |
 | **Notifications** | Mock SMS/IVR/email persisted to `NotificationLog` | Real gateway behind `NotificationService` |
 
 Everything else — the grievance **lifecycle state machine**, **PGRS tracking ID**, **geo + subject dynamic assignment**,
@@ -71,10 +71,12 @@ implemented and exercised by the seed + tests.
 
 ## Quick start
 
-**Prerequisites:** Node.js ≥ 20 (tested on 22), npm. No database, Docker, or cloud account needed for the pilot.
+**Prerequisites:** Node.js ≥ 20 (tested on 22), npm, and a PostgreSQL database
+(local Postgres, or a free managed one — Neon/Supabase/Render). Set
+`apps/api/.env` → `DATABASE_URL` to your Postgres connection string.
 
 ```bash
-# 1) Install + generate Prisma client + create & seed the SQLite database
+# 1) Install + generate Prisma client + create the schema & seed the database
 npm run setup:api      # apps/api: install, prisma generate, db push, seed
 npm run setup:web      # apps/web: install
 

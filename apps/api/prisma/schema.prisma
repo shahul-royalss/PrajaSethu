@@ -1,20 +1,18 @@
-// Praja Setu — pilot data model (Blueprint Part E.1)
-// NOTE: The blueprint targets PostgreSQL + pgvector at scale. For the pilot we use
-// SQLite so the system runs with ZERO external services. Enums are modelled as String
-// (validated in code via src/common/constants.ts) and list/JSON fields are stored as
-// JSON-encoded String, because SQLite has no native enum/array/json types. The Prisma
-// schema is otherwise provider-portable — swapping `provider = "postgresql"` and the
-// String→enum/jsonb columns is the documented scale path (Part J).
+// SAARTHI — data model (Blueprint Part E.1)
+// Runs on PostgreSQL so data is PERSISTENT and shared across devices and redeploys
+// (any managed Postgres: Neon, Supabase, Render Postgres). Enums are modelled as
+// String (validated in code via src/common/constants.ts) and list/JSON fields are
+// stored as JSON-encoded String for portability; pgvector/jsonb is the scale path.
 
 generator client {
   provider      = "prisma-client-js"
   // Pin the Linux engine target explicitly so generated client + runtime agree on
-  // the engine filename in this container (Debian/Ubuntu, OpenSSL 3.x).
+  // the engine filename in the container (Debian/Ubuntu, OpenSSL 3.x).
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

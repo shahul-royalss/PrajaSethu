@@ -20,6 +20,13 @@ services:
         value: "*"
       - key: JWT_SECRET
         generateValue: true
+      # PERSISTENT STORAGE: a managed Postgres connection string. Create a free DB
+      # (Neon / Supabase / Render Postgres) and paste its URL here in the Render
+      # dashboard, e.g. postgresql://USER:PASS@HOST/DB?sslmode=require
+      # The schema is applied + the demo baseline is seeded automatically on the
+      # first deploy; all data then survives every later redeploy and cold start.
+      - key: DATABASE_URL
+        sync: false
       # Pilot demo has no real SMS gateway — surface the generated OTP in the API
       # response so the citizen sign-in screen can show "Demo OTP: ……". Set to
       # "false" once a real SMS provider is wired up.
@@ -31,14 +38,6 @@ services:
         sync: false
       - key: ANTHROPIC_MODEL
         value: "claude-haiku-4-5-20251001"
-    # For data that survives redeploys, add a disk and set DATABASE_URL to a path
-    # on it (otherwise the seeded demo db is re-created from the image each deploy).
-    # NOTE: Render disks need a paid instance; on free tier use an external managed
-    # Postgres (Neon/Supabase) and switch the Prisma provider for true persistence.
-    # disk:
-    #   name: praja-data
-    #   mountPath: /app/prisma
-    #   sizeGB: 1
 
   - type: web
     name: praja-setu-web
