@@ -1,0 +1,56 @@
+# Praja Setu — Render blueprint (https://render.com).
+# In the Render dashboard: New + → Blueprint → pick this repo → Apply.
+# Two public services come up with HTTPS URLs; open the web one.
+#
+# The web service proxies /api to the API service (set via API_PROXY_TARGET below),
+# so the browser only ever talks to the web URL — no CORS, one public surface.
+
+services:
+  - type: web
+    name: praja-setu-api
+    runtime: docker
+    rootDir: apps/api
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: "4000"
+      - key: WEB_ORIGIN
+        value: "*"
+      - key: JWT_SECRET
+        generateValue: true
+      # PERSISTENT STORAGE: a managed Postgres connection string. Create a free DB
+      # (Neon / Supabase / Render Postgres) and paste its URL here in the Render
+      # dashboard, e.g. postgresql://USER:PASS@HOST/DB?sslmode=require
+      # The schema is applied + the demo baseline is seeded automatically on the
+      # first deploy; all data then survives every later redeploy and cold start.
+      - key: DATABASE_URL
+        sync: false
+      # Pilot demo has no real SMS gateway — surface the generated OTP in the API
+      # response so the citizen sign-in screen can show "Demo OTP: ……". Set to
+      # "false" once a real SMS provider is wired up.
+      - key: EXPOSE_MOCK_OTP
+        value: "true"
+      # Real AI analysis (root cause + pro suggestions). Add your Anthropic key in
+      # the Render dashboard to switch from the built-in heuristic to live Claude.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: "claude-haiku-4-5-20251001"
+
+  - type: web
+    name: praja-setu-web
+    runtime: docker
+    rootDir: apps/web
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: PORT
+        value: "3000"
+      - key: NEXT_PUBLIC_API_BASE
+        value: "/api"
+      # Deterministic literal (service name is fixed above), so it never depends on
+      # Render's fromService resolution. The web server proxies /api/* here.
+      - key: API_PROXY_TARGET
+        value: "https://praja-setu-api.onrender.com"

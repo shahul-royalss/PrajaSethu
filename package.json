@@ -1,0 +1,17 @@
+{
+  "name": "praja-setu",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Praja Setu — pilot Public Grievance Redressal System for Andhra Pradesh (NestJS API + Next.js web).",
+  "scripts": {
+    "setup:api": "npm --prefix apps/api install && bash apps/api/scripts/fetch-prisma-engines.sh && npm --prefix apps/api run setup",
+    "setup:web": "npm --prefix apps/web install",
+    "setup": "npm run setup:api && npm run setup:web",
+    "seed": "npm --prefix apps/api run db:seed",
+    "build": "npm --prefix apps/api run build && npm --prefix apps/web run build",
+    "dev:api": "npm --prefix apps/api run start:dev",
+    "dev:web": "npm --prefix apps/web run dev",
+    "start:api": "npm --prefix apps/api run start",
+    "start:web": "npm --prefix apps/web run start"
+  }
+}

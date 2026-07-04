@@ -1,0 +1,332 @@
+// SAARTHI — data model (Blueprint Part E.1)
+// Runs on PostgreSQL so data is PERSISTENT and shared across devices and redeploys
+// (any managed Postgres: Neon, Supabase, Render Postgres). Enums are modelled as
+// String (validated in code via src/common/constants.ts) and list/JSON fields are
+// stored as JSON-encoded String for portability; pgvector/jsonb is the scale path.
+
+generator client {
+  provider      = "prisma-client-js"
+  // Pin the Linux engine target explicitly so generated client + runtime agree on
+  // the engine filename in the container (Debian/Ubuntu, OpenSSL 3.x).
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Citizen / Petitioner ────────────────────────────────────────────────────
+model Citizen {
+  id                String   @id @default(cuid())
+  aadhaarToken      String?  @unique // vault reference only — NEVER the raw Aadhaar number
+  name              String
+  coName            String?  // C/o name (father/husband) — per the PGRS form
+  dob               String?  // date of birth (YYYY-MM-DD)
+  gender            String?  // MALE | FEMALE | OTHER
+  mobile            String
+  address           String?
+  houseNo           String?
+  habitation        String?
+  village           String?
+  mandal            String?
+  district          String?
+  secretariatCode   String?
+  applicantType     String   @default("INDIVIDUAL") // INDIVIDUAL | COMMUNITY
+  languagePref      String   @default("te")
+  vulnerabilityFlags String  @default("[]") // JSON array, e.g. ["ELDERLY","DISABILITY"]
+  createdAt         DateTime @default(now())
+
+  grievances Grievance[]
+  consents   ConsentRecord[]
+}
+
+// ── Department / Subject taxonomy ───────────────────────────────────────────
+model Department {
+  id        String   @id
+  nameEn    String
+  nameTe    String
+  parent    String?
+  slaMatrix String   @default("{}") // JSON: { "<level>": hours }
+
+  subjects   Subject[]
+  officers   Officer[]
+  grievances Grievance[]
+}
+
+model Subject {
+  id           String   @id
+  deptId       String
+  parentId     String?  // null = subject, set = sub-subject
+  nameEn       String
+  nameTe       String
+  defaultSlaHrs Int     @default(168)
+  categoryHint String   @default("NON_FINANCE") // FINANCE | NON_FINANCE
+  keywords     String   @default("[]") // JSON array — drives the pilot keyword classifier
+
+  department Department @relation(fields: [deptId], references: [id])
+  parent     Subject?   @relation("SubjectChildren", fields: [parentId], references: [id])
+  children   Subject[]  @relation("SubjectChildren")
+
+  @@index([deptId])
+}
+
+// ── Officer / Desk ──────────────────────────────────────────────────────────
+model Officer {
+  id           String  @id @default(cuid())
+  username     String  @unique
+  passwordHash String
+  name         String
+  role         String  // DA | OFFICER | SUPERVISOR | COLLECTOR | AUDITOR (capability)
+  designation  String? // government title shown in UI (Tahsildar, RDO, Collector…)
+  deptId       String?
+  level        Int     @default(1) // L1..L4 competence for escalation
+  jurisdiction String  @default("{}") // JSON: { mandal, secretariatCodes[] }
+  iamSubject   String? // mock Keycloak/OIDC subject id
+  active       Boolean @default(true)
+  createdAt    DateTime @default(now())
+
+  department  Department?  @relation(fields: [deptId], references: [id])
+  assignments Assignment[]
+  workLogs    WorkLog[]
+}
+
+// ── Grievance (core) ────────────────────────────────────────────────────────
+model Grievance {
+  id                  String   @id @default(cuid())
+  ysr                 String   @unique // public YSR-style tracking code
+  petitionerId        String
+  channel             String   // SACHIVALAYAM_ASSISTED | CITIZEN_APP | WEB | IVR | WHATSAPP | SMS | CALL_1902
+  language            String   @default("te")
+
+  deptId              String?
+  subjectId           String?
+  subSubjectId        String?
+  category            String   @default("NON_FINANCE") // FINANCE | NON_FINANCE
+
+  description         String
+  descriptionEn       String?
+  voiceInputRef       String?
+
+  aiSuggestedDeptId   String?
+  aiSuggestedSubjectId String?
+  aiConfidence        Float?
+
+  priorityScore       Float    @default(0)
+  distressFlag        Boolean  @default(false)
+  emergency           Boolean  @default(false)
+
+  geoLat              Float?
+  geoLng              Float?
+  // Location of the grievance (may differ from the petitioner's address — per the form)
+  district            String?
+  mandal              String?
+  village             String?
+  secretariatCode     String?
+  applicantType       String   @default("INDIVIDUAL") // INDIVIDUAL | COMMUNITY
+
+  status              String   @default("DRAFT")
+  currentAssigneeId   String?
+  currentLevel        Int      @default(1)
+
+  slaDueAt            DateTime?
+  slaBreachPredicted  Boolean  @default(false)
+  isDuplicateOf       String?
+
+  createdAt           DateTime @default(now())
+  registeredAt        DateTime?
+  resolvedAt          DateTime?
+  closedAt            DateTime?
+
+  petitioner  Citizen      @relation(fields: [petitionerId], references: [id])
+  department  Department?  @relation(fields: [deptId], references: [id])
+  assignments Assignment[]
+  workLogs    WorkLog[]
+  attachments Attachment[]
+  escalations Escalation[]
+  reopens     Reopen[]
+  feedback    Feedback[]
+  auditEvents AuditEvent[]
+
+  @@index([status])
+  @@index([deptId])
+  @@index([mandal])
+  @@index([currentAssigneeId])
+}
+
+model Assignment {
+  id          String   @id @default(cuid())
+  grievanceId String
+  assigneeId  String
+  level       Int
+  assignedBy  String   // SYSTEM | <officerId>
+  reason      String   // explainable routing
+  assignedAt  DateTime @default(now())
+  acceptedAt  DateTime?
+
+  grievance Grievance @relation(fields: [grievanceId], references: [id])
+  assignee  Officer   @relation(fields: [assigneeId], references: [id])
+
+  @@index([grievanceId])
+}
+
+model WorkLog {
+  id          String   @id @default(cuid())
+  grievanceId String
+  actorId     String?
+  actorRole   String
+  actionType  String   // ENQUIRY | ACTION_TAKEN | NOTE | HOLD | RESUME | XROAD_LOOKUP
+  noteTe      String?
+  noteEn      String?
+  aiDrafted   Boolean  @default(false)
+  evidenceIds String   @default("[]")
+  createdAt   DateTime @default(now())
+
+  grievance Grievance @relation(fields: [grievanceId], references: [id])
+  actor     Officer?  @relation(fields: [actorId], references: [id])
+
+  @@index([grievanceId])
+}
+
+model Attachment {
+  id            String   @id @default(cuid())
+  grievanceId   String
+  type          String   @default("DOCUMENT")
+  filename      String?
+  mime          String?
+  sizeBytes     Int?
+  originalSizeBytes Int?
+  dataBase64    String?  // pilot store (no MinIO) — base64 of the file bytes
+  compressed    Boolean  @default(false)
+  objectStoreKey String?
+  ocrText       String?
+  uploadedBy    String?  // CITIZEN | DA | <officerId>
+  hash          String?
+  createdAt     DateTime @default(now())
+
+  grievance Grievance @relation(fields: [grievanceId], references: [id])
+
+  @@index([grievanceId])
+}
+
+model Escalation {
+  id          String   @id @default(cuid())
+  grievanceId String
+  level       Int
+  dueAt       DateTime?
+  breachedAt  DateTime?
+  escalatedTo String?
+  trigger     String   // SLA_BREACH | SLA_PREDICTED | REOPEN | EMERGENCY | MANUAL
+  createdAt   DateTime @default(now())
+
+  grievance Grievance @relation(fields: [grievanceId], references: [id])
+
+  @@index([grievanceId])
+}
+
+model Reopen {
+  id             String   @id @default(cuid())
+  grievanceId    String
+  reasonTe       String?
+  reasonEn       String?
+  reopenedAt     DateTime @default(now())
+  escalatedLevel Int
+
+  grievance Grievance @relation(fields: [grievanceId], references: [id])
+
+  @@index([grievanceId])
+}
+
+model Feedback {
+  id          String   @id @default(cuid())
+  grievanceId String
+  rating      Int
+  comment     String?
+  qaAuditedBy String?
+  channel     String?
+  createdAt   DateTime @default(now())
+
+  grievance Grievance @relation(fields: [grievanceId], references: [id])
+
+  @@index([grievanceId])
+}
+
+// ── Consent (powers the assisted path + X-Road cross-dept lookups) ──────────
+model ConsentRecord {
+  id          String   @id @default(cuid())
+  petitionerId String
+  purpose     String
+  scope       String   @default("[]") // JSON array of dept ids allowed for data pulls
+  grantedBy   String   // SELF | DA
+  daId        String?
+  grantedAt   DateTime @default(now())
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+
+  petitioner Citizen @relation(fields: [petitionerId], references: [id])
+
+  @@index([petitionerId])
+}
+
+// ── Ledger / blockchain notary (hash-chained AuditEvent — Part D.2 / G.4) ───
+model AuditEvent {
+  id          String   @id @default(cuid())
+  seq         Int      @unique // chain position (assigned sequentially in LedgerService)
+  grievanceId String?
+  eventType   String
+  actorRole   String
+  payload     String   // canonical JSON of the event (off-chain record content)
+  payloadHash String   // SHA-256 of canonical payload
+  prevHash    String   // hash of previous block — forms the tamper-evident chain
+  blockHash   String   @unique // SHA-256(seq + prevHash + payloadHash + ts)
+  ledgerTxId  String   @unique // notary transaction id (fabric://… style)
+  ts          DateTime @default(now())
+
+  grievance Grievance? @relation(fields: [grievanceId], references: [id])
+
+  @@index([grievanceId])
+}
+
+// ── Mock UIDAI OTP (citizen login / eKYC) ───────────────────────────────────
+model Otp {
+  id        String   @id @default(cuid())
+  mobile    String
+  code      String
+  purpose   String   @default("LOGIN")
+  consumed  Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([mobile])
+}
+
+// ── X-Road exchange log (signed/logged cross-department lookups — Part D.1) ──
+model DataExchangeLog {
+  id            String   @id @default(cuid())
+  grievanceId   String?
+  consentId     String?
+  fromMember    String
+  toMember      String
+  service       String
+  requestHash   String
+  responseHash  String
+  signature     String
+  requestedBy   String
+  purpose       String
+  createdAt     DateTime @default(now())
+
+  @@index([grievanceId])
+}
+
+// ── Notifications (mock SMS/email — replaces real gateway in pilot) ─────────
+model NotificationLog {
+  id          String   @id @default(cuid())
+  grievanceId String?
+  channel     String   // SMS | EMAIL | IVR
+  to          String
+  template    String
+  body        String
+  createdAt   DateTime @default(now())
+
+  @@index([grievanceId])
+}

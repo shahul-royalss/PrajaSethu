@@ -1,0 +1,118 @@
+// Praja Setu — domain constants. SQLite has no native enums, so the allowed
+// values live here and are enforced in code (DTO validators + the state machine).
+
+// Functional capability roles (drive RBAC). A separate free-text `designation`
+// on each officer carries the real government title (Tahsildar, RDO, Collector…).
+export const Roles = {
+  DA: 'DA', // Digital Assistant / Volunteer (Sachivalayam operator)
+  OFFICER: 'OFFICER', // Field/redressal officer (VRO, Panchayat Secy, AE, WEA, Tahsildar…)
+  SUPERVISOR: 'SUPERVISOR', // Mandal/District grievance cell (MPDO, RDO, EE…)
+  COLLECTOR: 'COLLECTOR', // Collector / Joint Collector / State command centre
+  AUDITOR: 'AUDITOR', // Vigilance & Enforcement / Audit
+} as const;
+export type Role = (typeof Roles)[keyof typeof Roles];
+
+// Government designations offered at staff sign-in, each mapped to a capability role.
+export const DESIGNATIONS: { username: string; designation: string; role: Role; deptId: string | null; level: number }[] = [
+  { username: 'da1', designation: 'Digital Assistant (Sachivalayam)', role: Roles.DA, deptId: null, level: 1 },
+  { username: 'vro', designation: 'Village Revenue Officer (VRO)', role: Roles.OFFICER, deptId: 'REVENUE', level: 1 },
+  { username: 'panchayat.secy', designation: 'Panchayat Secretary', role: Roles.OFFICER, deptId: 'RWS', level: 1 },
+  { username: 'tahsildar', designation: 'Tahsildar', role: Roles.OFFICER, deptId: 'CS', level: 2 },
+  { username: 'ae.power', designation: 'Assistant Engineer (APSPDCL)', role: Roles.OFFICER, deptId: 'ENERGY', level: 1 },
+  { username: 'wea.pension', designation: 'Welfare & Education Assistant (WEA)', role: Roles.OFFICER, deptId: 'PEN', level: 1 },
+  { username: 'mpdo', designation: 'Mandal Parishad Development Officer (MPDO)', role: Roles.SUPERVISOR, deptId: null, level: 2 },
+  { username: 'rdo', designation: 'Revenue Divisional Officer (RDO)', role: Roles.SUPERVISOR, deptId: 'REVENUE', level: 3 },
+  { username: 'ee.rws', designation: 'Executive Engineer (Rural Water)', role: Roles.SUPERVISOR, deptId: 'RWS', level: 3 },
+  { username: 'joint.collector', designation: 'Joint Collector', role: Roles.COLLECTOR, deptId: null, level: 4 },
+  { username: 'collector', designation: 'District Collector', role: Roles.COLLECTOR, deptId: null, level: 4 },
+  { username: 'vigilance', designation: 'Vigilance & Enforcement Officer', role: Roles.AUDITOR, deptId: 'VIG', level: 3 },
+];
+
+export const Channels = {
+  SACHIVALAYAM_ASSISTED: 'SACHIVALAYAM_ASSISTED',
+  CITIZEN_APP: 'CITIZEN_APP',
+  WEB: 'WEB',
+  IVR: 'IVR',
+  WHATSAPP: 'WHATSAPP',
+  SMS: 'SMS',
+  CALL_1902: 'CALL_1902',
+} as const;
+export type Channel = (typeof Channels)[keyof typeof Channels];
+
+export const Category = {
+  FINANCE: 'FINANCE',
+  NON_FINANCE: 'NON_FINANCE',
+} as const;
+export type CategoryType = (typeof Category)[keyof typeof Category];
+
+export const Gender = {
+  MALE: 'MALE',
+  FEMALE: 'FEMALE',
+  OTHER: 'OTHER',
+} as const;
+export type GenderType = (typeof Gender)[keyof typeof Gender];
+
+export const ApplicantType = {
+  INDIVIDUAL: 'INDIVIDUAL',
+  COMMUNITY: 'COMMUNITY',
+} as const;
+export type ApplicantTypeType = (typeof ApplicantType)[keyof typeof ApplicantType];
+
+// Public tracking-ID prefix. Spandana's "YSR#" is rebranded to a neutral, current
+// "PGRS" code (configurable via TRACKING_PREFIX) so it isn't tied to a past govt.
+export const TRACKING_PREFIX = process.env.TRACKING_PREFIX ?? 'PGRS';
+
+// Grievance lifecycle states (Blueprint Part E.2)
+export const Status = {
+  DRAFT: 'DRAFT',
+  REGISTERED: 'REGISTERED',
+  CLASSIFIED: 'CLASSIFIED',
+  ASSIGNED: 'ASSIGNED',
+  UNDER_ENQUIRY: 'UNDER_ENQUIRY',
+  ACTION_TAKEN: 'ACTION_TAKEN',
+  RESOLVED: 'RESOLVED',
+  CLOSED: 'CLOSED',
+  REOPENED: 'REOPENED',
+  ON_HOLD: 'ON_HOLD',
+  REROUTED: 'REROUTED', // wrong type → service request / RTI desk
+  MERGED: 'MERGED', // duplicate → linked to parent
+  REJECTED: 'REJECTED', // invalid, with reason (appealable)
+} as const;
+export type StatusType = (typeof Status)[keyof typeof Status];
+
+// Escalation ladder (statutory spirit — Blueprint A.2)
+export const Levels: Record<number, string> = {
+  1: 'L1 — Local office / Nodal Officer',
+  2: 'L2 — District grievance cell / Public Grievance Officer',
+  3: 'L3 — State grievance authority / Head of Dept',
+  4: 'L4 — Chief Minister grievance cell (CMO)',
+};
+export const MAX_LEVEL = 4;
+
+// Audit/ledger event types notarised to the hash-chain (Blueprint G.4)
+export const LedgerEvent = {
+  GENESIS: 'GENESIS',
+  REGISTERED: 'REGISTERED',
+  CLASSIFIED: 'CLASSIFIED',
+  ASSIGNED: 'ASSIGNED',
+  REASSIGNED: 'REASSIGNED',
+  ACCEPTED: 'ACCEPTED',
+  UNDER_ENQUIRY: 'UNDER_ENQUIRY',
+  ACTION_TAKEN: 'ACTION_TAKEN',
+  ON_HOLD: 'ON_HOLD',
+  RESUMED: 'RESUMED',
+  RESOLVED: 'RESOLVED',
+  CITIZEN_CONFIRMED: 'CITIZEN_CONFIRMED',
+  CLOSED: 'CLOSED',
+  REOPENED: 'REOPENED',
+  ESCALATED: 'ESCALATED',
+  SLA_BREACHED: 'SLA_BREACHED',
+  SLA_PREDICTED_BREACH: 'SLA_PREDICTED_BREACH',
+  REROUTED: 'REROUTED',
+  MERGED: 'MERGED',
+  REJECTED: 'REJECTED',
+  XROAD_LOOKUP: 'XROAD_LOOKUP',
+} as const;
+export type LedgerEventType = (typeof LedgerEvent)[keyof typeof LedgerEvent];
+
+export const EMERGENCY_SLA_HOURS = 24; // ~24h emergency lane (Blueprint A.2)

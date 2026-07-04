@@ -1,0 +1,49 @@
+# Praja Setu — OPTIONAL scale-path infrastructure (Blueprint Part I / J).
+#
+# The PILOT runs with ZERO external services (SQLite, in-process adapters), so you
+# do NOT need this to run or demo the system. This compose file documents the
+# production-credible backing services the architecture grows into at district/
+# state scale. To use Postgres instead of SQLite, start `db` here and point
+# apps/api/.env DATABASE_URL at it, then switch the Prisma datasource provider to
+# "postgresql" and re-run `prisma db push` (see README "Scale path").
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: praja
+      POSTGRES_PASSWORD: praja
+      POSTGRES_DB: praja_setu
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  # S3-compatible object store for evidence/documents (signed URLs).
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: praja
+      MINIO_ROOT_PASSWORD: praja-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+
+  # Message bus to decouple intake spikes (Spandana-Monday). Kafka at state scale.
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+volumes:
+  pgdata:
+  miniodata:

@@ -1,0 +1,40 @@
+# Praja Setu — production compose (the easiest way to make it live on any server).
+#
+#   JWT_SECRET=$(openssl rand -hex 32) docker compose -f docker-compose.prod.yml up -d --build
+#
+# Then open http://<server-ip>:3000. Only the web service is exposed publicly;
+# the browser calls /api on the same origin and Next proxies it to the API
+# container over the private network (no CORS, one public port).
+
+services:
+  api:
+    build:
+      context: ./apps/api
+    environment:
+      - PORT=4000
+      - JWT_SECRET=${JWT_SECRET:-praja-setu-change-this-secret}
+      - WEB_ORIGIN=*
+    expose:
+      - "4000"
+    restart: unless-stopped
+    # Persist the SQLite db across restarts/redeploys (optional — remove for an
+    # ephemeral demo that re-seeds from the image each deploy):
+    volumes:
+      - apidata:/app/prisma
+
+  web:
+    build:
+      context: ./apps/web
+      args:
+        - NEXT_PUBLIC_API_BASE=/api
+    environment:
+      - PORT=3000
+      - API_PROXY_TARGET=http://api:4000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  apidata:

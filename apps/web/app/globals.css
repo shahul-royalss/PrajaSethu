@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+/* Telugu glyphs use the Telugu stack for better legibility (Blueprint F.1). */
+.font-telugu,
+[lang='te'] {
+  font-family: 'Noto Sans Telugu', Inter, system-ui, sans-serif;
+}
+
+/* Respect users who prefer reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
