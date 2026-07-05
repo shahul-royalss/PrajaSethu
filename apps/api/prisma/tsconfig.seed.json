@@ -1,0 +1,17 @@
+{
+  "//": "Self-contained compiler config for running prisma/seed.ts with ts-node. Deliberately does NOT extend the root tsconfig — the seed also runs inside the production container (scripts/start.sh), and must compile identically whether or not the root tsconfig is present.",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2021",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strictNullChecks": true,
+    "noImplicitAny": false,
+    "sourceMap": false
+  }
+}

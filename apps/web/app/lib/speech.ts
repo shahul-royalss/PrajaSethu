@@ -3,42 +3,98 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 // ── Text-to-speech (read a question aloud) ──────────────────────────────────
-// Uses the Web Speech API. Degrades silently if the device has no voice for the
-// language. Voices can load asynchronously, so we wait for them once.
-let voicesReady = false;
-function ensureVoices() {
-  if (voicesReady || typeof window === 'undefined' || !window.speechSynthesis) return;
-  voicesReady = true;
-  // Trigger async voice load on browsers that need it (Chrome).
-  window.speechSynthesis.getVoices();
-  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+// Uses the Web Speech API. Voices load ASYNCHRONOUSLY in Chrome — getVoices()
+// returns [] until the engine is ready — so speaking must wait for the list, or
+// the utterance goes out with no voice and Telugu/Hindi/… questions come out in
+// the wrong voice or not at all. loadVoices() resolves once the list is real.
+let voicesPromise: Promise<SpeechSynthesisVoice[]> | null = null;
+
+function loadVoices(): Promise<SpeechSynthesisVoice[]> {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return Promise.resolve([]);
+  const synth = window.speechSynthesis;
+  const now = synth.getVoices();
+  if (now.length) return Promise.resolve(now);
+  if (!voicesPromise) {
+    voicesPromise = new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearInterval(poll);
+        clearTimeout(deadline);
+        resolve(synth.getVoices());
+      };
+      synth.addEventListener?.('voiceschanged', finish, { once: true });
+      synth.onvoiceschanged = finish;
+      // Some engines never fire voiceschanged — poll briefly, then give up and
+      // let speak() proceed with u.lang alone (works on e.g. Android WebView).
+      const poll = setInterval(() => synth.getVoices().length && finish(), 250);
+      const deadline = setTimeout(finish, 2500);
+    });
+  }
+  return voicesPromise;
 }
 
-function pickVoice(langTag: string): SpeechSynthesisVoice | undefined {
-  const voices = window.speechSynthesis.getVoices();
-  const base = langTag.split('-')[0];
+// Voice tags vary: "te-IN", "te_IN", "te" — compare case-insensitively on both
+// the full tag and the base language.
+const normTag = (tag: string) => tag.toLowerCase().replace(/_/g, '-');
+
+function pickVoice(voices: SpeechSynthesisVoice[], langTag: string): SpeechSynthesisVoice | undefined {
+  const want = normTag(langTag);
+  const base = want.split('-')[0];
   return (
-    voices.find((v) => v.lang === langTag) ||
-    voices.find((v) => v.lang.toLowerCase().startsWith(base)) ||
+    voices.find((v) => normTag(v.lang) === want) ||
+    voices.find((v) => {
+      const l = normTag(v.lang);
+      return l === base || l.startsWith(`${base}-`);
+    }) ||
     undefined
   );
 }
 
+/** True if this device has an installed voice for the language (async — waits for the voice list). */
+export async function hasVoiceFor(langTag: string): Promise<boolean> {
+  const voices = await loadVoices();
+  return !!pickVoice(voices, langTag);
+}
+
 export function speak(text: string, langTag: string, onEnd?: () => void) {
-  if (typeof window === 'undefined' || !window.speechSynthesis || !text) return;
-  ensureVoices();
-  try {
-    window.speechSynthesis.cancel(); // stop anything already playing → repeatable
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = langTag;
-    u.rate = 0.92; // a touch slower for clarity / low-literacy users
-    const voice = pickVoice(langTag);
-    if (voice) u.voice = voice;
-    if (onEnd) u.onend = onEnd;
-    window.speechSynthesis.speak(u);
-  } catch {
-    /* no-op */
+  if (typeof window === 'undefined' || !window.speechSynthesis || !text) {
+    onEnd?.();
+    return;
   }
+  const synth = window.speechSynthesis;
+  loadVoices().then((voices) => {
+    try {
+      synth.cancel(); // stop anything already playing → repeatable
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = langTag;
+      u.rate = 0.92; // a touch slower for clarity / low-literacy users
+      const voice = pickVoice(voices, langTag);
+      if (voice) u.voice = voice;
+      let finished = false;
+      const finish = () => {
+        if (!finished) {
+          finished = true;
+          onEnd?.();
+        }
+      };
+      u.onend = finish;
+      // Also finish on error (e.g. language-unavailable) so the UI never sticks
+      // on "playing" when the engine silently refuses the language.
+      u.onerror = finish;
+      // Chrome can swallow an utterance queued in the same tick as cancel().
+      setTimeout(() => {
+        try {
+          synth.speak(u);
+        } catch {
+          finish();
+        }
+      }, 60);
+    } catch {
+      onEnd?.();
+    }
+  });
 }
 
 export function stopSpeaking() {
@@ -63,6 +119,26 @@ export function useSpeak() {
     speak(text, langTag, () => setSpeaking(false));
   }, []);
   return { speaking, play, stop: () => { stopSpeaking(); setSpeaking(false); } };
+}
+
+/**
+ * Whether the device can speak the given language: true/false once known,
+ * null while the voice list is still loading. Lets a page explain WHY nothing
+ * is heard (e.g. no Telugu voice installed) instead of failing silently.
+ */
+export function useVoiceSupport(langTag: string): boolean | null {
+  const [available, setAvailable] = useState<boolean | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setAvailable(null);
+    hasVoiceFor(langTag).then((ok) => {
+      if (alive) setAvailable(ok);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [langTag]);
+  return available;
 }
 
 // ── Speech-to-text (let the citizen speak their answer) ─────────────────────

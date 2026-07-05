@@ -35,6 +35,11 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/package.json ./package.json
+# The seed (prisma/seed.ts) runs via ts-node at container start and imports the
+# application services from src/, so the runtime image needs the sources and the
+# compiler config too — without them seeding fails and the demo logins never exist.
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 EXPOSE 4000
 CMD ["sh", "scripts/start.sh"]

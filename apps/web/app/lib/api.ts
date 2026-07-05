@@ -10,6 +10,10 @@ export class ApiError extends Error {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const GATEWAY = [0, 502, 503, 504];
+// 429 is emitted by the hosting platform's edge rate limiter, never by the API
+// itself — the request was rejected before it was processed, so retrying is safe
+// for every method (including complaint submission).
+const RATE_LIMITED = 429;
 
 async function request<T>(path: string, opts: RequestInit & { token?: string; retry?: boolean; tries?: number } = {}): Promise<T> {
   const { token, headers, retry, tries, ...rest } = opts;
@@ -47,6 +51,13 @@ async function request<T>(path: string, opts: RequestInit & { token?: string; re
       await sleep(Math.min(1500 * attempt, 6000));
       continue;
     }
+    // Rate-limited at the platform edge: retry a few times for ANY call — the
+    // app never saw the request, so this cannot double-submit anything.
+    if (res.status === RATE_LIMITED && attempt < Math.max(maxAttempts, 4) - 1) {
+      attempt++;
+      await sleep(Math.min(2500 * attempt, 8000));
+      continue;
+    }
     break;
   }
 
@@ -68,6 +79,8 @@ async function request<T>(path: string, opts: RequestInit & { token?: string; re
     let msg: string;
     if (apiMsg) {
       msg = Array.isArray(apiMsg) ? apiMsg.join(', ') : String(apiMsg);
+    } else if (res.status === RATE_LIMITED) {
+      msg = 'The service is busy right now — please wait a few seconds and press the button again. Nothing was lost.';
     } else if (res.status >= 500 || res.status === 0) {
       msg = 'The server is waking up — please try once more in a few seconds.';
     } else if (typeof body === 'string' && body.trim()) {
