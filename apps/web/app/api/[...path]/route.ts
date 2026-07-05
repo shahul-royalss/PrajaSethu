@@ -39,8 +39,12 @@ async function handler(req: NextRequest, ctx: { params: Promise<{ path: string[]
 
   // Ride out a sleeping/free-tier API: gateway 502/503/504 and connection errors
   // mean the request never reached the app, so retrying is safe (even for POST).
-  // The backoff sums to ~47s (under maxDuration=60) so a full cold start (30–60s)
-  // is absorbed here and never surfaces to the citizen as an error.
+  // 429 comes from the host platform's edge rate limiter (the app itself never
+  // sends one) — the request was rejected before reaching the app, so it is
+  // equally safe to retry after backing off. The backoff sums to ~47s (under
+  // maxDuration=60) so a full cold start (30–60s) is absorbed here and never
+  // surfaces to the citizen as an error.
+  const TRANSIENT = [429, 502, 503, 504];
   const MAX = 11;
   for (let attempt = 1; attempt <= MAX; attempt++) {
     let res: Response | null = null;
@@ -50,7 +54,7 @@ async function handler(req: NextRequest, ctx: { params: Promise<{ path: string[]
       console.error(`[api-proxy] attempt ${attempt} fetch error → ${dest}:`, (e as Error)?.message);
     }
 
-    if (res && ![502, 503, 504].includes(res.status)) {
+    if (res && !TRANSIENT.includes(res.status)) {
       if (res.status >= 500) console.error(`[api-proxy] upstream ${res.status} ← ${dest}`);
       const body = await res.arrayBuffer();
       const out = new Headers(res.headers);
@@ -60,8 +64,17 @@ async function handler(req: NextRequest, ctx: { params: Promise<{ path: string[]
       return new Response(body, { status: res.status, headers: out });
     }
 
-    if (res) console.error(`[api-proxy] attempt ${attempt} gateway ${res.status} ← ${dest} (API waking?)`);
-    if (attempt < MAX) await sleep(attempt <= 2 ? 2000 : 5000); // ~2,2,5×8 ≈ 47s
+    if (res) console.error(`[api-proxy] attempt ${attempt} ${res.status === 429 ? 'rate-limited' : `gateway ${res.status}`} ← ${dest}`);
+    if (attempt < MAX) {
+      // Rate limited → wait what the platform asks for (capped), else back off.
+      const retryAfter = res?.status === 429 ? Number(res.headers.get('retry-after')) : NaN;
+      const wait = Number.isFinite(retryAfter) && retryAfter > 0
+        ? Math.min(retryAfter * 1000, 10_000)
+        : res?.status === 429
+          ? 5000
+          : attempt <= 2 ? 2000 : 5000; // ~2,2,5×8 ≈ 47s
+      await sleep(wait);
+    }
   }
 
   return new Response(

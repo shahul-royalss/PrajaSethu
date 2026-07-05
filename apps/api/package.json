@@ -9,12 +9,12 @@
     "start:dev": "nest start --watch",
     "db:push": "prisma db push --skip-generate",
     "db:reset": "prisma db push --force-reset --skip-generate",
-    "db:seed": "ts-node --transpile-only prisma/seed.ts",
+    "db:seed": "ts-node --transpile-only -P prisma/tsconfig.seed.json prisma/seed.ts",
     "prisma:generate": "prisma generate",
     "setup": "prisma generate && prisma db push --skip-generate && npm run db:seed"
   },
   "prisma": {
-    "seed": "ts-node --transpile-only prisma/seed.ts"
+    "seed": "ts-node --transpile-only -P prisma/tsconfig.seed.json prisma/seed.ts"
   },
   "dependencies": {
     "@nestjs/common": "10.4.15",

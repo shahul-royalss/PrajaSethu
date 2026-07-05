@@ -24,6 +24,7 @@ export const en = {
   callHelpline: 'Call 1902 for help',
   readAloud: 'Read aloud',
   changeLanguage: 'Change language',
+  noVoiceHint: 'This device has no voice for your language, so questions cannot be read aloud. Everything still works — please read the questions on screen.',
 
   // roles / doors
   whoAreYou: 'Who are you?',

@@ -8,7 +8,7 @@ import { LANGUAGES } from '../../lib/intl/languages';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { Logo } from '../../components/Logo';
 import { api } from '../../lib/api';
-import { useSpeak, useSpeechInput } from '../../lib/speech';
+import { useSpeak, useSpeechInput, useVoiceSupport } from '../../lib/speech';
 import { getCitizenToken } from '../../lib/session';
 
 interface Geography {
@@ -64,6 +64,7 @@ type Phase = 'lang' | 'form' | 'review' | 'done';
 export default function NewGrievancePage() {
   const { t, meta, lang, setLang } = useI18n();
   const { speaking, play, stop } = useSpeak();
+  const voiceAvailable = useVoiceSupport(meta.speech);
   const [phase, setPhase] = useState<Phase>('lang');
   const [autoRead, setAutoRead] = useState(true);
   const [geo, setGeo] = useState<Geography | null>(null);
@@ -252,6 +253,12 @@ export default function NewGrievancePage() {
             <div className="h-2 rounded-full bg-brand transition-all" style={{ width: `${progress}%` }} />
           </div>
         </div>
+
+        {phase === 'form' && voiceAvailable === false && (
+          <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            🔇 {t('noVoiceHint')}
+          </p>
+        )}
 
         {phase === 'form' && (
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
