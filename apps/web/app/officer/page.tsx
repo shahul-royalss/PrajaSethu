@@ -381,7 +381,7 @@ function Workbench({ token, officer, logout }: { token: string; officer: Officer
 export default function OfficerPage() {
   return (
     <div className="min-h-screen">
-      <Header title="Officer workbench" />
+      <Header title="Officer workbench" backHref="/staff" />
       <LoginGate allowedRoles={['OFFICER', 'SUPERVISOR', 'COLLECTOR']} title="Officer sign-in">
         {({ token, officer, logout }) => <Workbench token={token} officer={officer} logout={logout} />}
       </LoginGate>

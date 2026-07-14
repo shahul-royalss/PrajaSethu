@@ -1,10 +1,42 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../../../lib/api';
 import { Icon, IconName } from '../Icon';
 import { useBi } from '../bi';
 import { ChartCanvas, makeGradient, CHART_GRID } from '../Chart';
+
+// Eased count-up for hero numbers (static under prefers-reduced-motion).
+// Animates from the CURRENT value when `to` changes (e.g. live data arriving
+// after the placeholder), so the number never snaps back to zero.
+function CountUp({ to, decimals = 0, duration = 1400, delay = 0 }: { to: number; decimals?: number; duration?: number; delay?: number }) {
+  const [v, setV] = useState(0);
+  const currentRef = useRef(0);
+  const playedRef = useRef(false);
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { currentRef.current = to; setV(to); return; }
+    let raf = 0;
+    const from = currentRef.current;
+    const t0 = performance.now() + (playedRef.current ? 0 : delay); // delay only the entrance play
+    playedRef.current = true;
+    const tick = (now: number) => {
+      const p = Math.min(1, Math.max(0, (now - t0) / duration));
+      const val = from + (to - from) * (1 - Math.pow(1 - p, 4)); // easeOutQuart
+      currentRef.current = val;
+      setV(val);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [to, duration, delay]);
+  return <>{v.toFixed(decimals)}</>;
+}
+
+// Left-to-right staggered reveal shared by the line/bar charts. Applies ONLY to
+// the initial render (mode 'default') — hover/resize transitions inherit
+// options.animation.delay in Chart.js v4 and would lag by the stagger otherwise.
+const cineDelay = (perPoint: number, perDataset = 0) => (c: { type?: string; mode?: string; dataIndex?: number; datasetIndex?: number }) =>
+  c.type === 'data' && c.mode === 'default' ? (c.dataIndex ?? 0) * perPoint + (c.datasetIndex ?? 0) * perDataset : 0;
 
 interface Supervisor { satisfaction: number | null; byDept: { dept: string; count: number }[] }
 interface Command { trends: { dept: string; last7: number; prev7: number; deltaPct: number | null }[]; hotspots: { mandal: string; subject: string; count: number }[] }
@@ -60,6 +92,7 @@ export function AnalyticsView({ token }: { token: string }) {
               },
               options: {
                 responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: false } },
+                animation: { duration: 1500, easing: 'easeInOutQuart', delay: cineDelay(80, 450) },
                 scales: { x: { grid: { display: false }, border: { display: false } }, y: { position: 'left', grid: { color: CHART_GRID }, border: { display: false }, min: 60, max: 100, ticks: { callback: (v: any) => v + '%' } }, y2: { position: 'right', grid: { display: false }, border: { display: false }, min: 3, max: 5, ticks: { stepSize: 0.5 } } },
               },
             })} />
@@ -72,7 +105,7 @@ export function AnalyticsView({ token }: { token: string }) {
             <ChartCanvas ariaLabel="Department performance" build={() => ({
               type: 'bar',
               data: { labels: ['Water', 'Pensions', 'Civil Sup.', 'APSPDCL', 'Revenue', 'Health'], datasets: [{ data: [94, 91, 88, 85, 79, 76], backgroundColor: ['#0C9C6C', '#0C9C6C', '#3a66dc', '#3a66dc', '#D9870B', '#D9870B'], borderRadius: 6, maxBarThickness: 18 }] },
-              options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: CHART_GRID }, border: { display: false }, max: 100, ticks: { callback: (v: any) => v + '%' } }, y: { grid: { display: false }, border: { display: false } } } },
+              options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, animation: { duration: 950, easing: 'easeOutQuart', delay: cineDelay(95) }, scales: { x: { grid: { color: CHART_GRID }, border: { display: false }, max: 100, ticks: { callback: (v: any) => v + '%' } }, y: { grid: { display: false }, border: { display: false } } } },
             })} />
           </div>
         </div>
@@ -84,10 +117,10 @@ export function AnalyticsView({ token }: { token: string }) {
               <ChartCanvas ariaLabel="Citizen satisfaction" build={() => ({
                 type: 'doughnut',
                 data: { labels: ['Very satisfied', 'Satisfied', 'Neutral', 'Unhappy'], datasets: [{ data: [58, 27, 9, 6], backgroundColor: ['#0C9C6C', '#3a66dc', '#CBA046', '#D62B3B'], borderWidth: 0, spacing: 2 }] },
-                options: { responsive: true, maintainAspectRatio: false, cutout: '72%', plugins: { legend: { display: false } } },
+                options: { responsive: true, maintainAspectRatio: false, cutout: '72%', plugins: { legend: { display: false } }, animation: { animateRotate: true, animateScale: true, duration: 1300, easing: 'easeOutQuart' } },
               })} />
               <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                <div className="display" style={{ fontSize: 24, fontWeight: 700 }}>{satScore}</div><div style={{ fontSize: 10.5, color: 'var(--muted)' }}>/ 5.0</div>
+                <div className="display" style={{ fontSize: 24, fontWeight: 700 }}><CountUp to={Number(satScore)} decimals={1} duration={1300} delay={350} /></div><div style={{ fontSize: 10.5, color: 'var(--muted)' }}>/ 5.0</div>
               </div>
             </div>
             <div style={{ flex: 1, fontSize: 12, color: 'var(--muted)', lineHeight: 1.7 }}>
@@ -99,8 +132,8 @@ export function AnalyticsView({ token }: { token: string }) {
         <div className="card">
           <div className="panel-head"><h2>{bi('Most complaints by village', 'గ్రామం వారీగా ఎక్కువ ఫిర్యాదులు')}</h2></div>
           <div className="cardbody">
-            {DEMO_VILLAGES.map((v) => (
-              <div className="rankrow" key={v.nm}><span className="nm">{v.nm}</span><span className="track"><i style={{ width: `${v.w}%` }} /></span><span className="vn">{v.v}</span></div>
+            {DEMO_VILLAGES.map((v, i) => (
+              <div className="rankrow" key={v.nm}><span className="nm">{v.nm}</span><span className="track"><i style={{ width: `${v.w}%` }} /></span><span className="vn"><CountUp to={v.v} duration={1100} delay={600 + i * 120} /></span></div>
             ))}
           </div>
         </div>

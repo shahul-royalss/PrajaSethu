@@ -144,7 +144,7 @@ function Supervisor({ token }: { token: string }) {
 export default function SupervisorPage() {
   return (
     <div className="min-h-screen">
-      <Header title="Supervisor" />
+      <Header title="Supervisor" backHref="/staff" />
       <LoginGate allowedRoles={['SUPERVISOR', 'COLLECTOR', 'AUDITOR']} title="Supervisor sign-in">
         {({ token }) => <Supervisor token={token} />}
       </LoginGate>

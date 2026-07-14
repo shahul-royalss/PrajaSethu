@@ -12,7 +12,7 @@ import { DEMO, isOverdue, priority, slaTimer, statusPill } from '../data';
 interface Supervisor { open: number; overdue: number; avgResolveDays: number; satisfaction: number | null; slaCompliance: number | null; byDept: { dept: string; count: number }[]; anomalies?: { fastClosures?: unknown[] } }
 interface Command { slaAtRisk: number; hotspots: { mandal: string; subject: string; dept: string | null; count: number }[]; totalOpen: number }
 
-export function OverviewView({ token, officer, onOpenWorkbench }: { token: string; officer: Officer; onOpenWorkbench: () => void }) {
+export function OverviewView({ token, officer, onOpenWorkbench }: { token: string; officer: Officer; onOpenWorkbench?: () => void }) {
   const bi = useBi();
   const [sup, setSup] = useState<Supervisor | null>(null);
   const [cmd, setCmd] = useState<Command | null>(null);
@@ -112,7 +112,7 @@ export function OverviewView({ token, officer, onOpenWorkbench }: { token: strin
           </div>
           <div className="ai-cta">
             <button className="primary">{bi('Order inspection', 'తనిఖీ ఆదేశించండి')}</button>
-            <button onClick={onOpenWorkbench}>{bi('Open workbench', 'వర్క్‌బెంచ్ తెరవండి')}</button>
+            {onOpenWorkbench && <button onClick={onOpenWorkbench}>{bi('Open workbench', 'వర్క్‌బెంచ్ తెరవండి')}</button>}
           </div>
         </div>
       </div>
@@ -156,7 +156,7 @@ export function OverviewView({ token, officer, onOpenWorkbench }: { token: strin
       <div className="card tablecard stagger">
         <div className="panel-head" style={{ padding: '16px 18px' }}>
           <h2>{bi('Recent grievances', 'ఇటీవలి ఫిర్యాదులు')}</h2>
-          <button className="btn btn-ghost" onClick={onOpenWorkbench}><span>{bi('Open workbench', 'వర్క్‌బెంచ్ తెరవండి')}</span><Icon name="arrow" /></button>
+          {onOpenWorkbench && <button className="btn btn-ghost" onClick={onOpenWorkbench}><span>{bi('Open workbench', 'వర్క్‌బెంచ్ తెరవండి')}</span><Icon name="arrow" /></button>}
         </div>
         <table className="tbl">
           <thead><tr>

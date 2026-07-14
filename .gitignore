@@ -20,3 +20,6 @@ apps/api/prisma/migrations/
 # Logs / OS
 *.log
 .DS_Store
+
+# TypeScript incremental build info
+*.tsbuildinfo
