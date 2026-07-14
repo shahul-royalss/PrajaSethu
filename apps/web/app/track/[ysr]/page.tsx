@@ -8,8 +8,9 @@ import { Button, Card, CardBody, ErrorNote, Pill, Spinner, StatusBadge } from '.
 import { Timeline } from '../../components/Timeline';
 import { IntegrityShield } from '../../components/IntegrityShield';
 import { api, ApiError } from '../../lib/api';
-import { PublicGrievance } from '../../lib/types';
+import { Bilingual, PublicGrievance } from '../../lib/types';
 import { daysLeft, fmtDate } from '../../lib/i18n';
+import { GENERAL_HELPLINE, helplineFor } from '../../lib/departments';
 import { useI18n } from '../../lib/intl';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 
@@ -150,13 +151,65 @@ export default function TrackView() {
               </CardBody>
             </Card>
 
-            <div className="flex flex-wrap gap-2">
-              <a href="tel:1902" className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700">📞 Call 1902</a>
-              <Link href="/console" className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700">🎙 Talk to assistant</Link>
-            </div>
+            <AssistPanel department={g.department} />
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+// "Talk to assistant" → the concerned department's helpline for THIS complaint
+// (mapped from the grievance's department), with the general 1902 line as backup.
+function AssistPanel({ department }: { department: Bilingual | null }) {
+  const { t, lang } = useI18n();
+  const [open, setOpen] = useState(false);
+  const number = helplineFor(department?.en);
+  const deptName = department ? (lang === 'te' ? department.te : department.en) : null;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <a href={`tel:${GENERAL_HELPLINE}`} className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700">
+          📞 {t('callHelpline')}
+        </a>
+        <button
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className={`rounded-lg border px-3.5 py-2 text-sm font-semibold ${open ? 'border-brand bg-brand text-white' : 'border-slate-300 bg-white text-slate-700'}`}
+        >
+          🎙 {t('talkToAssistant')}
+        </button>
+      </div>
+
+      {open && (
+        <Card className="animate-fade-up border-brand/25">
+          <CardBody className="space-y-2.5">
+            {deptName && (
+              <div className="text-sm text-slate-600">
+                {t('assistDept')}: <b className="text-slate-900">{deptName}</b>
+              </div>
+            )}
+            <a
+              href={`tel:${number}`}
+              className="flex items-center justify-between gap-3 rounded-xl bg-india px-4 py-3 font-semibold text-white shadow-sm transition hover:brightness-110"
+            >
+              <span>📞 {department ? t('assistCallDept') : t('assistGeneral')}</span>
+              <span className="font-mono text-xl font-extrabold tracking-wide">{number}</span>
+            </a>
+            {number !== GENERAL_HELPLINE && (
+              <a
+                href={`tel:${GENERAL_HELPLINE}`}
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+              >
+                <span>{t('assistGeneral')}</span>
+                <span className="font-mono text-base font-bold">{GENERAL_HELPLINE}</span>
+              </a>
+            )}
+            <p className="text-xs text-slate-500">{t('assistVisit')}</p>
+          </CardBody>
+        </Card>
+      )}
     </div>
   );
 }

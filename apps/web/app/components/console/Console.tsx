@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useI18n } from '../../lib/intl';
-import { Officer } from '../../lib/session';
+import { DEPARTMENTS } from '../../lib/departments';
+import { clearSession, Officer } from '../../lib/session';
 import { BackButton } from '../AppNav';
 import { Icon, IconSprite } from './Icon';
 import { NAV, ViewId } from './nav';
@@ -43,7 +44,7 @@ const ROLE_LABEL: Record<string, { en: string; te: string }> = {
   AUDITOR: { en: 'Vigilance & Audit', te: 'విజిలెన్స్ & ఆడిట్' },
 };
 
-export function Console({ token, officer, logout }: { token: string; officer: Officer; logout: () => void }) {
+export function Console({ token, officer }: { token: string; officer: Officer }) {
   const { lang, setLang } = useI18n();
   const bi = useBi();
   const te = lang === 'te';
@@ -68,6 +69,26 @@ export function Console({ token, officer, logout }: { token: string; officer: Of
 
   const initials = officer.name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
   const t = TITLES[view];
+
+  // Officer profile card (opens in place above the rail chip; sign-out inside).
+  const router = useRouter();
+  const [profileOpen, setProfileOpen] = useState(false);
+  useEffect(() => {
+    if (!profileOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setProfileOpen(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [profileOpen]);
+  const signOut = () => {
+    setProfileOpen(false);
+    // Clear the stored session directly (not via the LoginGate logout prop):
+    // flipping LoginGate's state would flash its sign-in card at /staff while
+    // the navigation to the landing page is still in flight.
+    clearSession();
+    router.push('/'); // back to the landing / sign-in page
+  };
+  const roleLabel = bi(ROLE_LABEL[officer.role]?.en ?? officer.role, ROLE_LABEL[officer.role]?.te ?? officer.role);
+  const dept = officer.deptId ? DEPARTMENTS[officer.deptId] : null;
 
   return (
     <div className={`console${te ? ' te' : ''}`}>
@@ -105,15 +126,45 @@ export function Console({ token, officer, logout }: { token: string; officer: Of
             })}
           </nav>
           <div className="rail-foot">
-            <button className="officer" onClick={logout} aria-label={bi('Sign out', 'సైన్ అవుట్')} title={bi('Sign out', 'సైన్ అవుట్')}>
+            <button
+              className="officer"
+              onClick={() => setProfileOpen((o) => !o)}
+              aria-expanded={profileOpen}
+              aria-haspopup="dialog"
+              aria-label={bi('Officer profile', 'అధికారి ప్రొఫైల్')}
+              title={bi('Officer profile', 'అధికారి ప్రొఫైల్')}
+            >
               <div className="avatar">{initials}</div>
               <div style={{ minWidth: 0 }}>
                 <div className="officer-name">{officer.name}</div>
-                <div className="officer-role">
-                  {officer.designation ?? bi(ROLE_LABEL[officer.role]?.en ?? officer.role, ROLE_LABEL[officer.role]?.te ?? officer.role)}
-                </div>
+                <div className="officer-role">{officer.designation ?? roleLabel}</div>
               </div>
             </button>
+
+            {profileOpen && (
+              <>
+                <div className="profile-scrim" onClick={() => setProfileOpen(false)} aria-hidden />
+                <div className="profile-pop" role="dialog" aria-label={bi('Officer profile', 'అధికారి ప్రొఫైల్')}>
+                  <div className="pp-head">
+                    <div className="pp-avatar">{initials}</div>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="pp-name">{officer.name}</div>
+                      <div className="pp-desg">{officer.designation ?? roleLabel}</div>
+                    </div>
+                  </div>
+                  <div className="pp-rows">
+                    <div className="pp-row"><span>{bi('Role', 'పాత్ర')}</span><b>{roleLabel}</b></div>
+                    {dept && <div className="pp-row"><span>{bi('Department', 'విభాగం')}</span><b>{bi(dept.en, dept.te)}</b></div>}
+                    {officer.level != null && <div className="pp-row"><span>{bi('Escalation level', 'ఎస్కలేషన్ స్థాయి')}</span><b>L{officer.level}</b></div>}
+                    <div className="pp-row"><span>{bi('Officer ID', 'అధికారి ఐడీ')}</span><b className="mono">{officer.id}</b></div>
+                  </div>
+                  <button className="pp-signout" onClick={signOut}>
+                    <Icon name="arrow" style={{ width: 14, height: 14 }} />
+                    {bi('Sign out', 'సైన్ అవుట్')}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </aside>
 

@@ -9,6 +9,15 @@ Chart.defaults.font.family = "'Inter',sans-serif";
 Chart.defaults.font.size = 11.5;
 Chart.defaults.color = '#5A6B8C';
 
+// Cinematic tooltip styling (navy glass card) shared by every chart.
+Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(13,33,80,.94)';
+Chart.defaults.plugins.tooltip.titleColor = '#fff';
+Chart.defaults.plugins.tooltip.bodyColor = '#DCE6FB';
+Chart.defaults.plugins.tooltip.padding = 10;
+Chart.defaults.plugins.tooltip.cornerRadius = 10;
+Chart.defaults.plugins.tooltip.boxPadding = 4;
+Chart.defaults.plugins.tooltip.caretSize = 6;
+
 /**
  * Thin React wrapper around raw Chart.js (the prototype uses raw Chart.js, not
  * react-chartjs-2 — which doesn't support React 19). `build` receives the 2D

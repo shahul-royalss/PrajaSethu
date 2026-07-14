@@ -42,6 +42,7 @@
   background:linear-gradient(178deg,var(--navy-900),var(--navy-700) 78%,#10295f);
   color:#C6D2EC; position:sticky;top:0;height:100vh;display:flex;flex-direction:column;
   border-right:1px solid rgba(255,255,255,.06);
+  z-index:30; /* profile popover (and its scrim) must paint above the main column */
 }
 .console .brand{display:flex;align-items:center;gap:11px;padding:22px 20px 18px}
 .console .brand-mark{
@@ -66,7 +67,31 @@
 .console .nav-item.active::before{content:"";position:absolute;left:-12px;top:50%;transform:translateY(-50%);width:3px;height:20px;background:var(--gold);border-radius:0 3px 3px 0}
 .console .nav-item .tag{margin-left:auto;font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:20px;background:rgba(214,43,59,.92);color:#fff}
 .console .nav-item .tag.amber{background:rgba(217,135,11,.95)}
-.console .rail-foot{padding:12px;border-top:1px solid rgba(255,255,255,.07)}
+.console .rail-foot{padding:12px;border-top:1px solid rgba(255,255,255,.07);position:relative}
+
+/* ---- officer profile popover (opens above the rail chip) ---- */
+.console .profile-scrim{position:fixed;inset:0;z-index:39;background:rgba(9,22,51,.28);backdrop-filter:blur(1.5px)}
+.console .profile-pop{
+  position:absolute;left:10px;bottom:calc(100% + 10px);width:252px;z-index:40;
+  background:linear-gradient(172deg,#0D2150,#122C66);border:1px solid rgba(203,160,70,.35);
+  border-radius:16px;box-shadow:0 24px 64px rgba(5,12,30,.55);padding:16px;color:#DCE6FB;
+  animation:pop-up .28s cubic-bezier(.16,1,.3,1);
+}
+@keyframes pop-up{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:none}}
+.console .pp-head{display:flex;gap:12px;align-items:center;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,.1)}
+.console .pp-avatar{width:44px;height:44px;border-radius:12px;flex:none;background:linear-gradient(150deg,var(--gold),var(--gold-deep));color:#0D2150;font-weight:800;display:grid;place-items:center;font-size:15px}
+.console .pp-name{font-weight:700;color:#fff;font-size:14px;line-height:1.25}
+.console .pp-desg{font-size:11.5px;color:#9FB1D8;margin-top:2px}
+.console .pp-rows{padding:11px 0 9px;display:flex;flex-direction:column;gap:7px}
+.console .pp-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:12px;color:#9FB1D8}
+.console .pp-row b{color:#EAF0FC;font-weight:600;text-align:right;min-width:0}
+.console .pp-row .mono{font-family:'IBM Plex Mono',monospace;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
+.console .pp-signout{
+  width:100%;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:8px;
+  padding:9px 12px;border-radius:10px;background:rgba(214,43,59,.14);border:1px solid rgba(214,43,59,.42);
+  color:#FF9AA4;font-weight:700;font-size:12.5px;transition:background .15s,color .15s;
+}
+.console .pp-signout:hover{background:rgba(214,43,59,.3);color:#fff}
 .console .officer{display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:11px;transition:background .15s;width:100%;text-align:left}
 .console .officer:hover{background:rgba(255,255,255,.06)}
 .console .avatar{width:36px;height:36px;border-radius:50%;flex:none;background:linear-gradient(140deg,#3a5bb0,#26407e);display:grid;place-items:center;color:#fff;font-weight:600;font-size:13px;border:1.5px solid rgba(255,255,255,.16)}
@@ -99,8 +124,10 @@
 
 /* ---- view system ---- */
 .console .views{padding:26px 28px 44px;flex:1}
-.console .view{display:none;animation:rise .5s cubic-bezier(.2,.7,.3,1)}
+/* Cinematic view entrance: fade up with a settling scale and a focus pull. */
+.console .view{display:none;animation:viewIn .6s cubic-bezier(.16,1,.3,1)}
 .console .view.active{display:block}
+@keyframes viewIn{0%{opacity:0;transform:translateY(22px) scale(.988);filter:blur(10px)}55%{filter:blur(0)}100%{opacity:1;transform:none;filter:none}}
 @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .console .stagger>*{animation:rise .5s both cubic-bezier(.2,.7,.3,1)}
 .console .stagger>*:nth-child(1){animation-delay:.02s}.console .stagger>*:nth-child(2){animation-delay:.07s}
@@ -296,17 +323,26 @@
 .console .map-toolbar{padding:13px 16px;border-bottom:1px solid var(--line);display:flex;gap:7px;align-items:center;flex-wrap:wrap}
 .console .map-toolbar .sp{margin-left:auto}
 .console .mapview{position:relative;background:radial-gradient(120% 120% at 30% 10%,#f3f6fc,#e7edf8);height:520px}
+/* Adaptive height so the full-bleed (slice) scene keeps its towns/labels in
+   frame on wide displays instead of cropping ever more of the top/bottom. */
+.console .mapview.sat{background:#141b10;height:clamp(460px,40vw,620px)}
 .console .mapview svg{width:100%;height:100%;display:block}
-.console .region{stroke:#fff;stroke-width:2;cursor:default;transition:filter .15s,opacity .15s}
-.console .region:hover{filter:brightness(1.06);opacity:.92}
+.console .mapview .region{fill:transparent;stroke:rgba(255,255,255,.5);stroke-width:1;cursor:pointer;transition:fill .2s}
+.console .mapview .region:hover{fill:rgba(255,255,255,.09)}
+.console .heatlayer{animation:heatPulse 6s ease-in-out infinite}
+@keyframes heatPulse{0%,100%{opacity:.82}50%{opacity:1}}
+.console .mapview .svg-hot .core{fill:var(--bad);stroke:#fff;stroke-width:2.4}
+.console .mapview .svg-hot .ring{fill:none;stroke:rgba(214,43,59,.55);stroke-width:2;transform-box:fill-box;transform-origin:center;animation:svgping 1.8s infinite}
+@keyframes svgping{0%{transform:scale(.55);opacity:.95}100%{transform:scale(2);opacity:0}}
+.console .mapview .map-north{position:absolute;top:12px;right:14px;text-align:center;color:#fff;opacity:.9;font-size:9.5px;font-weight:700;line-height:1.15;text-shadow:0 1px 3px rgba(0,0,0,.65);pointer-events:none}
+.console .mapview .map-attrib{position:absolute;right:14px;bottom:10px;display:flex;align-items:center;gap:7px;color:#fff;opacity:.8;font-size:10px;text-shadow:0 1px 3px rgba(0,0,0,.7);pointer-events:none}
+.console .mapview .map-attrib .scalebar{display:inline-block;width:52px;height:3px;border-radius:2px;background:#fff}
+.console .mapview .map-attrib .dot{opacity:.6}
 .console .maplegend{position:absolute;left:16px;bottom:16px;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:12px;padding:12px 14px;box-shadow:var(--shadow)}
 .console .maplegend .lt{font-size:11px;font-weight:600;color:var(--ink);margin-bottom:8px}
 .console .legrow{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted);margin-bottom:5px}
 .console .legrow .sw{width:22px;height:9px;border-radius:3px}
-.console .hot{position:absolute}
-.console .hot .ping{width:13px;height:13px;border-radius:50%;background:var(--bad);border:2.5px solid #fff;box-shadow:0 2px 6px rgba(214,43,59,.5);position:relative}
-.console .hot .ping::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:2px solid rgba(214,43,59,.5);animation:ping 1.8s infinite}
-@keyframes ping{0%{transform:scale(.6);opacity:.9}100%{transform:scale(1.7);opacity:0}}
+.console .legrow .pin{width:11px;height:11px;border-radius:50%;background:var(--bad);border:2px solid #fff;box-shadow:0 1px 4px rgba(214,43,59,.5)}
 .console .hotlist .panel-head{padding:16px 18px}
 .console .hotrow{display:flex;gap:12px;padding:13px 18px;border-top:1px solid var(--line);cursor:pointer;transition:background .12s}
 .console .hotrow:hover{background:var(--surface-2)}
@@ -322,6 +358,30 @@
 /* ============ ANALYTICS ============ */
 .console .an-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
 .console .an-grid .wide{grid-column:1/-1}
+
+/* ---- cinematic analytics choreography (shares the viewIn keyframe) ---- */
+.console .an-grid>*{animation:viewIn .85s both cubic-bezier(.16,1,.3,1)}
+.console .an-grid>*:nth-child(1){animation-delay:.05s}
+.console .an-grid>*:nth-child(2){animation-delay:.18s}
+.console .an-grid>*:nth-child(3){animation-delay:.3s}
+.console .an-grid>*:nth-child(4){animation-delay:.42s}
+.console .an-grid>*:nth-child(5){animation-delay:.54s}
+@keyframes growX{from{transform:scaleX(0)}}
+.console .an-grid .rankrow .track i{transform-origin:left;animation:growX 1.05s .6s both cubic-bezier(.2,.8,.2,1)}
+.console .an-grid .rankrow:nth-child(2) .track i{animation-delay:.72s}
+.console .an-grid .rankrow:nth-child(3) .track i{animation-delay:.84s}
+.console .an-grid .rankrow:nth-child(4) .track i{animation-delay:.96s}
+.console .an-grid .rankrow:nth-child(5) .track i{animation-delay:1.08s}
+@keyframes slideL{from{opacity:0;transform:translateX(26px)}to{opacity:1;transform:none}}
+.console .predict .pred-item{animation:slideL .6s both cubic-bezier(.16,1,.3,1)}
+.console .predict .pred-item:nth-of-type(1){animation-delay:.65s}
+.console .predict .pred-item:nth-of-type(2){animation-delay:.78s}
+.console .predict .pred-item:nth-of-type(3){animation-delay:.91s}
+.console .predict .pred-item:nth-of-type(4){animation-delay:1.04s}
+@keyframes sheen{0%{transform:translateX(-140%) skewX(-18deg)}55%,100%{transform:translateX(260%) skewX(-18deg)}}
+.console .predict::before{content:"";position:absolute;top:0;bottom:0;left:0;width:45%;background:linear-gradient(100deg,transparent,rgba(231,201,136,.11),transparent);animation:sheen 6s 1.2s infinite;pointer-events:none}
+@keyframes pcGlow{0%,100%{opacity:.85}50%{opacity:1;text-shadow:0 0 16px rgba(231,201,136,.65)}}
+.console .pred-item .pc{animation:pcGlow 3.4s ease-in-out infinite}
 .console .rankrow{display:flex;align-items:center;gap:12px;padding:9px 0}
 .console .rankrow .nm{font-size:13px;font-weight:600;width:120px;flex:none}
 .console .rankrow .track{flex:1;height:9px;background:var(--surface-2);border-radius:6px;overflow:hidden}

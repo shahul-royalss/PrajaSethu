@@ -129,6 +129,10 @@ export const en = {
   closeYes: 'Yes, close it',
   reopenNo: 'No, reopen it',
   talkToAssistant: 'Talk to an assistant',
+  assistDept: 'Concerned department',
+  assistCallDept: 'Call department helpline',
+  assistGeneral: 'General grievance helpline',
+  assistVisit: 'Prefer in person? Staff at your Grama/Ward Sachivalayam can help you too.',
 
   // status names
   st_REGISTERED: 'Registered',

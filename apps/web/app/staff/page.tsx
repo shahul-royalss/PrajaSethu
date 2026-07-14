@@ -9,7 +9,7 @@ export default function StaffPage() {
   return (
     <Suspense fallback={null}>
       <LoginGate allowedRoles={['DA', 'OFFICER', 'SUPERVISOR', 'COLLECTOR', 'AUDITOR']} title="Staff sign-in">
-        {({ token, officer, logout }) => <Console token={token} officer={officer} logout={logout} />}
+        {({ token, officer }) => <Console token={token} officer={officer} />}
       </LoginGate>
     </Suspense>
   );
