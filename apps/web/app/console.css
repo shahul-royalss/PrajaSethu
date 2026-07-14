@@ -362,6 +362,14 @@
   .console .views{padding:18px 14px 36px}.console .topbar{padding:11px 14px}
   .console .search{display:none}.console .kpis{grid-template-columns:1fr}
 }
+/* Wherever the global bottom app-nav (64px + safe area) is visible — below
+   Tailwind's md breakpoint, or at any width in ?app=1 mode (html.saarthi-app-nav,
+   set by BottomNav) — shorten the sticky rail so its sign-out chip stays
+   reachable above the bar. */
+@media (max-width:767px){
+  .console .rail{height:calc(100vh - 64px - env(safe-area-inset-bottom));height:calc(100dvh - 64px - env(safe-area-inset-bottom))}
+}
+html.saarthi-app-nav .console .rail{height:calc(100vh - 64px - env(safe-area-inset-bottom));height:calc(100dvh - 64px - env(safe-area-inset-bottom))}
 @media (prefers-reduced-motion:reduce){
   .console *{animation:none!important;scroll-behavior:auto!important;transition:none!important}
 }

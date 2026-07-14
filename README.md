@@ -35,6 +35,20 @@ Workbench** (queue · complaint detail with voice transcript, evidence & notaris
 **GIS Intelligence & Hotspots**, and **Analytics & Predictions** — plus All-Grievances, Audit & Ledger, Citizens and
 Administration. Charts use Chart.js; the whole console is bilingual **EN ⇄ తెలుగు** and wired to live pilot data.
 
+### In-app navigation (web + mobile app)
+
+The web UI is built to be embedded in a **mobile-app WebView** (which has no browser chrome) as well as used in a
+browser, so navigation is self-contained:
+
+- Every page header carries **Back** and **Home** controls, and a **bottom app-navigation bar** (Back · Home ·
+  role-aware quick links — **Heatmap** and **Analytics** for supervisors/collectors/auditors, **New complaint** and
+  **Track** for citizens) appears on phones. The app wrapper can open any URL with **`?app=1`** to keep the bar
+  visible at every viewport width for that session.
+- Console views are **deep-linkable**: `/staff?view=gis` opens GIS Intelligence & Hotspots (the heatmap) directly;
+  `overview`, `workbench`, `grievances`, `analytics`, `citizens`, `audit` and `admin` work the same way. View changes
+  push real history entries, so the Android hardware back button (wired to the WebView's `goBack()`) unwinds them
+  naturally — Back never dead-ends.
+
 ### Screenshots
 
 | Citizen tracking | Collector command centre |

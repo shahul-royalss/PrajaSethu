@@ -127,7 +127,7 @@ function Command({ token }: { token: string }) {
 export default function CommandPage() {
   return (
     <div className="min-h-screen">
-      <Header title="Command centre" />
+      <Header title="Command centre" backHref="/staff" />
       <LoginGate allowedRoles={['COLLECTOR', 'SUPERVISOR', 'AUDITOR']} title="Collector / command sign-in">
         {({ token }) => <Command token={token} />}
       </LoginGate>

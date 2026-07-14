@@ -71,7 +71,7 @@ export default function TrackView() {
 
   return (
     <div className="min-h-screen">
-      <Header title="Track" right={<div className="flex items-center gap-3"><LanguageSwitcher compact /><Link href="/track" className="text-sm text-brand hover:underline">{t('trackByNumber')}</Link></div>} />
+      <Header title="Track" backHref="/track" right={<div className="flex items-center gap-3"><LanguageSwitcher compact /><Link href="/track" className="text-sm text-brand hover:underline">{t('trackByNumber')}</Link></div>} />
       <main className="mx-auto max-w-2xl px-4 py-6 sm:px-6">
         {loading && <Spinner label="Loading your grievance…" />}
         {error && (

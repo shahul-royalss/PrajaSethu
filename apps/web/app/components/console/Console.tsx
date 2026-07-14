@@ -1,10 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useI18n } from '../../lib/intl';
 import { Officer } from '../../lib/session';
-import { Icon, IconName, IconSprite } from './Icon';
+import { BackButton } from '../AppNav';
+import { Icon, IconSprite } from './Icon';
+import { NAV, ViewId } from './nav';
 import { useBi } from './bi';
 import { OverviewView } from './views/Overview';
 import { WorkbenchView } from './views/Workbench';
@@ -13,25 +16,7 @@ import { AnalyticsView } from './views/Analytics';
 import { GrievancesView } from './views/Grievances';
 import { GovernanceView } from './views/Governance';
 
-export type ViewId =
-  | 'overview' | 'workbench' | 'grievances' | 'gis' | 'analytics' | 'citizens' | 'audit' | 'admin';
-
-interface NavDef {
-  id: ViewId; icon: IconName; en: string; te: string; roles: string[];
-  tag?: { text: string; amber?: boolean };
-  group: 'ops' | 'intel' | 'gov';
-}
-
-const NAV: NavDef[] = [
-  { id: 'overview', icon: 'grid', en: 'District Command', te: 'జిల్లా కమాండ్', roles: ['SUPERVISOR', 'COLLECTOR', 'AUDITOR'], group: 'ops' },
-  { id: 'workbench', icon: 'layers', en: 'Officer Workbench', te: 'అధికారి వర్క్‌బెంచ్', roles: ['OFFICER', 'SUPERVISOR', 'COLLECTOR'], group: 'ops' },
-  { id: 'grievances', icon: 'inbox', en: 'All Grievances', te: 'అన్ని ఫిర్యాదులు', roles: ['SUPERVISOR', 'COLLECTOR', 'AUDITOR'], group: 'ops' },
-  { id: 'gis', icon: 'map', en: 'GIS & Hotspots', te: 'GIS & హాట్‌స్పాట్‌లు', roles: ['SUPERVISOR', 'COLLECTOR', 'AUDITOR'], group: 'intel' },
-  { id: 'analytics', icon: 'chart', en: 'Analytics', te: 'విశ్లేషణ', roles: ['SUPERVISOR', 'COLLECTOR', 'AUDITOR'], group: 'intel' },
-  { id: 'citizens', icon: 'users', en: 'Citizens', te: 'పౌరులు', roles: ['SUPERVISOR', 'COLLECTOR', 'AUDITOR'], group: 'intel' },
-  { id: 'audit', icon: 'shield', en: 'Audit & Ledger', te: 'ఆడిట్ & లెడ్జర్', roles: ['AUDITOR', 'COLLECTOR'], group: 'gov' },
-  { id: 'admin', icon: 'cog', en: 'Administration', te: 'అడ్మినిస్ట్రేషన్', roles: ['COLLECTOR', 'AUDITOR'], group: 'gov' },
-];
+export type { ViewId } from './nav';
 
 const TITLES: Record<ViewId, { en: string; te: string; ctxEn: string; ctxTe: string }> = {
   overview: { en: 'District Command Center', te: 'జిల్లా కమాండ్ సెంటర్', ctxEn: 'Andhra Pradesh · Real-Time Governance', ctxTe: 'ఆంధ్రప్రదేశ్ · రియల్-టైమ్ గవర్నెన్స్' },
@@ -64,9 +49,22 @@ export function Console({ token, officer, logout }: { token: string; officer: Of
   const te = lang === 'te';
 
   const nav = useMemo(() => NAV.filter((n) => n.roles.includes(officer.role)), [officer.role]);
-  const allowed = nav.map((n) => n.id);
+  const allowed = useMemo(() => nav.map((n) => n.id), [nav]);
   const initial: ViewId = officer.role === 'OFFICER' ? 'workbench' : 'overview';
-  const [view, setView] = useState<ViewId>(allowed.includes(initial) ? initial : (allowed[0] ?? 'overview'));
+  const defaultView: ViewId = allowed.includes(initial) ? initial : (allowed[0] ?? 'overview');
+
+  // The active view lives in the URL (?view=gis etc.) so views are deep-linkable
+  // (e.g. the bottom nav's Heatmap tab) and back/forward — including a WebView's
+  // hardware back — walk through them. Next syncs useSearchParams with pushState.
+  const search = useSearchParams();
+  const urlView = search.get('view') as ViewId | null;
+  const view: ViewId = urlView && allowed.includes(urlView) ? urlView : defaultView;
+  const setView = (v: ViewId) => {
+    if (v === view || !allowed.includes(v)) return;
+    const q = new URLSearchParams(window.location.search);
+    q.set('view', v); // merge, so markers like ?app=1 survive view switches
+    window.history.pushState(null, '', `?${q.toString()}`);
+  };
 
   const initials = officer.name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
   const t = TITLES[view];
@@ -137,7 +135,8 @@ export function Console({ token, officer, logout }: { token: string; officer: Of
                 <button className={te ? 'on' : ''} aria-pressed={te} lang="te" onClick={() => setLang('te')} style={{ fontFamily: "'Noto Sans Telugu',sans-serif" }}>తెలుగు</button>
               </div>
               <button className="icon-btn" aria-label={bi('Notifications — unread', 'నోటిఫికేషన్లు — చదవనివి')}><Icon name="bell" /><span className="dot" aria-hidden /></button>
-              <Link href="/" className="icon-btn" aria-label={bi('Home', 'హోమ్')}><Icon name="compass" /></Link>
+              <BackButton className="icon-btn" fallback="/" />
+              <Link href="/" className="icon-btn" aria-label={bi('Home', 'హోమ్')} title={bi('Home', 'హోమ్')}><Icon name="compass" /></Link>
             </div>
           </header>
 
@@ -154,12 +153,18 @@ export function Console({ token, officer, logout }: { token: string; officer: Of
                 </div>
               </section>
             )}
-            {view === 'overview' && <OverviewView token={token} officer={officer} onOpenWorkbench={() => setView('workbench')} />}
-            {view === 'workbench' && <WorkbenchView token={token} officer={officer} />}
-            {view === 'grievances' && <GrievancesView token={token} />}
-            {view === 'gis' && <GisView token={token} />}
-            {view === 'analytics' && <AnalyticsView token={token} />}
-            {(view === 'citizens' || view === 'audit' || view === 'admin') && <GovernanceView view={view} token={token} />}
+            {nav.length > 0 && (
+              <>
+                {view === 'overview' && (
+                  <OverviewView token={token} officer={officer} onOpenWorkbench={allowed.includes('workbench') ? () => setView('workbench') : undefined} />
+                )}
+                {view === 'workbench' && <WorkbenchView token={token} officer={officer} />}
+                {view === 'grievances' && <GrievancesView token={token} />}
+                {view === 'gis' && <GisView token={token} />}
+                {view === 'analytics' && <AnalyticsView token={token} />}
+                {(view === 'citizens' || view === 'audit' || view === 'admin') && <GovernanceView view={view} token={token} />}
+              </>
+            )}
           </div>
         </div>
       </div>

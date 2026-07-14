@@ -24,6 +24,14 @@ export const en = {
   callHelpline: 'Call 1902 for help',
   readAloud: 'Read aloud',
   changeLanguage: 'Change language',
+
+  // app navigation (bottom bar + header controls)
+  navHome: 'Home',
+  navTrack: 'Track',
+  navNew: 'New complaint',
+  navHeatmap: 'Heatmap',
+  navAnalytics: 'Analytics',
+  navConsole: 'Console',
   noVoiceHint: 'This device has no voice for your language, so questions cannot be read aloud. Everything still works — please read the questions on screen.',
 
   // roles / doors
