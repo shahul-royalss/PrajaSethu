@@ -12,6 +12,10 @@ services:
     rootDir: apps/api
     dockerfilePath: ./Dockerfile
     plan: free
+    # Track the default branch and redeploy automatically on every push to it,
+    # so code merged to main always reaches production without a manual deploy.
+    branch: main
+    autoDeploy: true
     healthCheckPath: /api/health
     envVars:
       - key: PORT
@@ -45,6 +49,10 @@ services:
     rootDir: apps/web
     dockerfilePath: ./Dockerfile
     plan: free
+    # Track the default branch and redeploy automatically on every push to it,
+    # so UI/design changes merged to main always reach production.
+    branch: main
+    autoDeploy: true
     envVars:
       - key: PORT
         value: "3000"
