@@ -1,9 +1,24 @@
 # Praja Setu — Render blueprint (https://render.com).
 # In the Render dashboard: New + → Blueprint → pick this repo → Apply.
-# Two public services come up with HTTPS URLs; open the web one.
+# Two public services + one Postgres come up; open the web service's URL.
 #
 # The web service proxies /api to the API service (set via API_PROXY_TARGET below),
 # so the browser only ever talks to the web URL — no CORS, one public surface.
+
+# PERSISTENT STORAGE: a managed Postgres, provisioned by this blueprint. The API
+# applies the schema and seeds the demo baseline automatically on first boot, and
+# data then survives every later redeploy and cold start.
+# NOTE: Render allows ONE free Postgres per workspace, and free databases expire
+# after 30 days. If the free DB slot is taken (or for anything longer-lived),
+# delete the `databases:` block + the fromDatabase reference below and instead
+# paste an external connection string (Neon / Supabase free tier, e.g.
+# postgresql://USER:PASS@HOST/DB?sslmode=require) into DATABASE_URL in the
+# dashboard.
+databases:
+  - name: praja-setu-db
+    plan: free
+    databaseName: prajasetu
+    user: prajasetu
 
 services:
   - type: web
@@ -20,13 +35,12 @@ services:
         value: "*"
       - key: JWT_SECRET
         generateValue: true
-      # PERSISTENT STORAGE: a managed Postgres connection string. Create a free DB
-      # (Neon / Supabase / Render Postgres) and paste its URL here in the Render
-      # dashboard, e.g. postgresql://USER:PASS@HOST/DB?sslmode=require
-      # The schema is applied + the demo baseline is seeded automatically on the
-      # first deploy; all data then survives every later redeploy and cold start.
+      # Internal connection string of the blueprint's Postgres (see `databases:`
+      # at the top). Nothing to paste — Render fills this in automatically.
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: praja-setu-db
+          property: connectionString
       # Pilot demo has no real SMS gateway — surface the generated OTP in the API
       # response so the citizen sign-in screen can show "Demo OTP: ……". Set to
       # "false" once a real SMS provider is wired up.
@@ -50,7 +64,13 @@ services:
         value: "3000"
       - key: NEXT_PUBLIC_API_BASE
         value: "/api"
-      # Deterministic literal (service name is fixed above), so it never depends on
-      # Render's fromService resolution. The web server proxies /api/* here.
+      # Resolved by Render to the API service's actual public URL. A hardcoded
+      # "https://praja-setu-api.onrender.com" breaks when that subdomain is
+      # already taken globally and Render suffixes the name (e.g.
+      # praja-setu-api-lbrh.onrender.com) — fromService always tracks the real
+      # URL. The web server proxies /api/* here.
       - key: API_PROXY_TARGET
-        value: "https://praja-setu-api.onrender.com"
+        fromService:
+          type: web
+          name: praja-setu-api
+          envVarKey: RENDER_EXTERNAL_URL

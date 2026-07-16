@@ -28,11 +28,14 @@ persists in the `apidata` volume (remove the volume for an ephemeral demo that r
 
 1. Get the code onto a GitHub repo you control (see *Getting the code up* below).
 2. Render dashboard → **New + → Blueprint** → select the repo → **Apply**. It reads
-   [`render.yaml`](render.yaml) and creates both services with public URLs.
-3. Open the **praja-setu-web** URL.
+   [`render.yaml`](render.yaml) and creates both services **plus a free Postgres** — the API applies
+   the schema and seeds the demo baseline automatically on first boot, so there is nothing to paste.
+3. Open the **praja-setu-web** URL (Render may suffix the service names if they're taken globally,
+   e.g. `praja-setu-web-xxxx` — `API_PROXY_TARGET` tracks the API's real URL automatically).
 
-`render.yaml` wires the web service's `API_PROXY_TARGET` to the API service automatically. For data
-that survives redeploys, uncomment the `disk:` block in `render.yaml`.
+Caveats: Render allows one free Postgres per workspace and free databases expire after 30 days. If
+the slot is taken or you need longevity, remove the `databases:` block from `render.yaml` and set
+`DATABASE_URL` in the dashboard to an external Postgres (Neon / Supabase free tier).
 
 ---
 
