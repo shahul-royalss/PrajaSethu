@@ -1,8 +1,9 @@
 'use client';
 
 import { ReactNode, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { api } from '../lib/api';
-import { getOfficer, getToken, saveSession, clearSession, Officer } from '../lib/session';
+import { getCitizen, getCitizenToken, getOfficer, getToken, saveSession, clearSession, Officer } from '../lib/session';
 import { Button, Card, CardBody, ErrorNote, Field } from './ui';
 
 interface AuthCtx {
@@ -28,6 +29,7 @@ export function LoginGate({
   title: string;
   children: (ctx: AuthCtx) => ReactNode;
 }) {
+  const router = useRouter();
   const [token, setToken] = useState<string | null>(null);
   const [officer, setOfficer] = useState<Officer | null>(null);
   const [ready, setReady] = useState(false);
@@ -37,14 +39,33 @@ export function LoginGate({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const t = getToken();
-    const o = getOfficer();
-    if (t && o) {
-      setToken(t);
-      setOfficer(o);
-    }
-    setReady(true);
-  }, []);
+    // A signed-in CITIZEN must never land on a staff login — back button, deep
+    // link or bfcache restore included. They go to their own home; the staff
+    // form only appears after an explicit logout → staff sign-in.
+    const check = () => {
+      const t = getToken();
+      const o = getOfficer();
+      if (t && o) {
+        setToken(t);
+        setOfficer(o);
+        setReady(true);
+        return;
+      }
+      if (getCitizenToken() && getCitizen()) {
+        router.replace('/citizen');
+        return;
+      }
+      setReady(true);
+    };
+    check();
+    // bfcache restore (Android back button) re-serves the old page without a
+    // mount — re-run the session check so stale login UIs never show.
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) check();
+    };
+    window.addEventListener('pageshow', onShow);
+    return () => window.removeEventListener('pageshow', onShow);
+  }, [router]);
 
   async function login() {
     setBusy(true);

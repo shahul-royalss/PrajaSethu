@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { LedgerService } from './ledger.service';
 import { Public } from '../../common/auth/public.decorator';
 import { JwtAuthGuard } from '../../common/auth/jwt-auth.guard';
@@ -21,6 +21,25 @@ export class LedgerController {
   @Get('trail/:grievanceId')
   trail(@Param('grievanceId') grievanceId: string) {
     return this.ledger.grievanceTrail(grievanceId);
+  }
+
+  // Per-case block explorer — public (a citizen may inspect their own case's
+  // chain; ids are unguessable cuids and blocks carry no raw PII).
+  @Public()
+  @Get('chain/:grievanceId')
+  chainForGrievance(@Param('grievanceId') grievanceId: string) {
+    return this.ledger.chain({ grievanceId, limit: 100 });
+  }
+
+  // District-wide block explorer — staff.
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @RequireRoles(Roles.AUDITOR, Roles.COLLECTOR, Roles.SUPERVISOR, Roles.OFFICER, Roles.DA)
+  @Get('chain')
+  chain(@Query('limit') limit?: string, @Query('before') before?: string) {
+    return this.ledger.chain({
+      limit: limit ? Number(limit) : undefined,
+      before: before ? Number(before) : undefined,
+    });
   }
 
   // Full-chain verification — auditor only.

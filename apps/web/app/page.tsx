@@ -31,11 +31,26 @@ export default function LoginPage() {
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
-    // Already signed in? Go straight to the right home.
-    if (getCitizenToken() && getCitizen()) { router.replace('/citizen'); return; }
-    if (getToken() && getOfficer()) { router.replace('/staff'); return; }
+    // Already signed in? Go straight to the right home. This runs on mount AND
+    // on bfcache restores (pageshow persisted) so the Android back button can
+    // never resurface the login screen for a signed-in user — the only way
+    // back here is an explicit logout.
+    const bounce = (): boolean => {
+      if (getCitizenToken() && getCitizen()) { router.replace('/citizen'); return true; }
+      if (getToken() && getOfficer()) { router.replace('/staff'); return true; }
+      return false;
+    };
+    if (bounce()) return;
     setReady(true);
     api.warm(); // start a sleeping API's cold start now, so submit is instant later
+    const onShow = (e: PageTransitionEvent) => { if (e.persisted) bounce(); };
+    const onPop = () => { bounce(); };
+    window.addEventListener('pageshow', onShow);
+    window.addEventListener('popstate', onPop);
+    return () => {
+      window.removeEventListener('pageshow', onShow);
+      window.removeEventListener('popstate', onPop);
+    };
   }, [router]);
 
   function flash(m: string) { setToast(m); setTimeout(() => setToast(null), 2800); }
@@ -159,7 +174,8 @@ function CitizenForm({ bi, router, flash }: { bi: (e: string, t: string) => stri
     const r = await run(() => api.postSafe<{ accessToken: string; citizen: CitizenUser }>('/auth/citizen/verify-otp', { mobile, code: otp }));
     if (!r) return;
     saveCitizenSession(r.accessToken, r.citizen);
-    router.push('/citizen');
+    // replace — the login screen must not remain in history behind the back button
+    router.replace('/citizen');
   }
 
   const masked = mobile.length >= 4 ? `+91 ●●●●● ●${mobile.slice(-3)}` : '+91 •••••';
@@ -234,7 +250,8 @@ function StaffForm({ bi, router, flash }: { bi: (e: string, t: string) => string
     try {
       const r = await api.postSafe<{ accessToken: string; officer: Officer }>('/auth/officer/login', { username: user, password: pwd });
       saveSession(r.accessToken, r.officer);
-      router.push('/staff');
+      // replace — back from the console must not land on the sign-in screen
+      router.replace('/staff');
     } catch (e) { setError((e as Error).message); }
     finally { clearTimeout(wt); setWaking(false); setBusy(false); }
   }

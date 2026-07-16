@@ -9,10 +9,11 @@ import { Icon, IconName } from '../Icon';
 import { useBi } from '../bi';
 import { isOverdue, priority, slaTimer, statusPill } from '../data';
 
-interface Attachment { id: string; filename: string; mime: string; sizeBytes: number; originalSizeBytes?: number; compressed: boolean; createdAt: string }
+interface Attachment { id: string; type?: string; filename: string; mime: string; sizeBytes: number; durationSec?: number | null; originalSizeBytes?: number; compressed: boolean; createdAt: string; hash?: string }
 interface XroadService { id: string; member: string; deptId: string; label: string; category: string; description: string }
 const WAVE = [6, 12, 20, 9, 16, 24, 14, 8, 18, 26, 11, 7, 15, 22, 10, 19, 13, 25, 9, 14, 21, 8, 17, 12, 6, 20, 15, 9, 23, 11, 7, 16, 13];
 const kb = (n?: number) => (!n ? '0 KB' : n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`);
+const isAudio = (a: Attachment) => a.type === 'VOICE' || a.type === 'REOPEN_VOICE' || (a.mime ?? '').startsWith('audio/');
 
 export function WorkbenchView({ token, officer }: { token: string; officer: Officer }) {
   const bi = useBi();
@@ -143,6 +144,13 @@ export function WorkbenchView({ token, officer }: { token: string; officer: Offi
                   <div className="tags">
                     <span className={`prio pr-${p.level}`}>{bi(p.label.en, p.label.te)} · {p.score}/100</span>
                     <span className="chip" style={{ cursor: 'default' }}>{detail.department?.en ?? '—'}</span>
+                    {detail.severity && <span className="chip" style={{ cursor: 'default', fontWeight: 700, color: detail.severity === 'CRITICAL' ? 'var(--bad)' : detail.severity === 'HIGH' ? 'var(--warn)' : undefined }}>{bi('Severity', 'తీవ్రత')}: {detail.severity}</span>}
+                    {detail.urgency && <span className="chip" style={{ cursor: 'default' }}>{bi('Urgency', 'తక్షణత')}: {detail.urgency}</span>}
+                    {detail.langName && detail.detectedLang && (
+                      <span className="chip" style={{ cursor: 'default' }}>🌐 {detail.langName.native} · {detail.detectedLang}{detail.langConfidence ? ` ${Math.round(detail.langConfidence * 100)}%` : ''}{detail.codeSwitched ? ' · code-switched' : ''}</span>
+                    )}
+                    {(detail.reportCount ?? 1) > 1 && <span className="chip" style={{ cursor: 'default', fontWeight: 700, color: 'var(--warn)' }}>👥 {detail.reportCount} {bi('reports merged', 'నివేదికలు విలీనం')}</span>}
+                    {detail.routedBy === 'AI' && <span className="chip" style={{ cursor: 'default', color: '#7C3AED' }}>⚡ {bi('AI-routed', 'AI రూట్')}{detail.aiSuggested?.confidence ? ` ${Math.round(detail.aiSuggested.confidence * 100)}%` : ''}</span>}
                     <span className="chip" style={{ cursor: 'default' }}>{detail.category === 'FINANCE' ? bi('Finance', 'ఫైనాన్స్') : bi('Non-finance', 'నాన్-ఫైనాన్స్')}</span>
                     <span className="verify"><Icon name="shield" />{bi('Ledger-verified', 'లెడ్జర్-ధృవీకరించబడింది')}</span>
                   </div>
@@ -159,24 +167,77 @@ export function WorkbenchView({ token, officer }: { token: string; officer: Offi
                           <span><Icon name="pin" />{[detail.petitioner?.village, detail.mandal].filter(Boolean).join(', ') || '—'}</span>
                           <span><Icon name="phone" />{detail.petitioner?.mobileMasked ?? '—'}</span>
                           {detail.petitioner?.applicantType === 'COMMUNITY' && <span><Icon name="users" />{bi('Community', 'సముదాయం')}</span>}
+                          {detail.citizenProfile && (
+                            <span title={bi('Citizen history', 'పౌర చరిత్ర')}>
+                              <Icon name="users" />{detail.citizenProfile.totalComplaints} {bi('cases', 'కేసులు')}
+                              {detail.citizenProfile.avgRating != null ? ` · ${detail.citizenProfile.avgRating.toFixed(1)}★` : ''}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <button className="btn btn-ghost"><Icon name="phone" />{bi('Call', 'కాల్')}</button>
                     </div>
+                    {/* live location captured at submit — the officer's map pin */}
+                    {detail.location?.geo && (
+                      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, border: '1px solid var(--line)', borderRadius: 10, padding: '8px 12px', background: '#F7FAFF' }}>
+                        <Icon name="pin" style={{ width: 15, height: 15, color: 'var(--royal)' }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700 }}>{bi('Live location at submit', 'సమర్పణ సమయ లొకేషన్')}</div>
+                          <div className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
+                            {detail.location.geo.lat.toFixed(5)}, {detail.location.geo.lng.toFixed(5)}
+                            {detail.location.geo.accuracy != null ? ` ±${Math.round(detail.location.geo.accuracy)}m` : ''}
+                          </div>
+                        </div>
+                        <a
+                          className="btn btn-ghost"
+                          style={{ padding: '6px 10px', fontSize: 12 }}
+                          href={`https://www.openstreetmap.org/?mlat=${detail.location.geo.lat}&mlon=${detail.location.geo.lng}#map=17/${detail.location.geo.lat}/${detail.location.geo.lng}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {bi('Open map', 'మ్యాప్ తెరవండి')}
+                        </a>
+                      </div>
+                    )}
                   </div>
-                  {/* voice + transcript */}
+                  {/* voice evidence + transcript — the ORIGINAL audio travels with the ticket */}
                   <div className="dsection">
                     <h4>{bi('Original complaint · filed in citizen language', 'అసలు ఫిర్యాదు · పౌర భాషలో')}</h4>
-                    <div className="voicebar">
-                      <button className="play" onClick={() => speak(detail.description ?? '', 'te-IN')} aria-label="Play"><Icon name="play" /></button>
-                      <div className="wave">{WAVE.map((h, i) => <i key={i} style={{ height: h, background: h > 18 ? 'var(--navy-600)' : undefined }} />)}</div>
-                      <span className="mono" style={{ fontSize: 12, color: 'var(--muted)' }}>0:41</span>
-                    </div>
+                    {(() => {
+                      const audio = attachments.filter(isAudio);
+                      if (audio.length > 0) {
+                        return audio.map((a) => (
+                          <div key={a.id} style={{ marginBottom: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: 'var(--muted)', marginBottom: 4 }}>
+                              <Icon name="mic" style={{ width: 13, height: 13 }} />
+                              <b>{a.type === 'REOPEN_VOICE' ? bi('Reopen reason (voice)', 'రీఓపెన్ కారణం (వాయిస్)') : bi('Original recording — untouched evidence', 'అసలు రికార్డింగ్ — మార్చని సాక్ష్యం')}</b>
+                              {a.durationSec ? <span>· {Math.floor(a.durationSec / 60)}:{String(a.durationSec % 60).padStart(2, '0')}</span> : null}
+                              {a.hash && <span className="mono" title={bi('SHA-256 sealed on the ledger', 'లెడ్జర్‌లో సీల్ చేసిన SHA-256')}>· ⛓ {a.hash.slice(0, 12)}…</span>}
+                            </div>
+                            <audio controls preload="none" src={`${API_BASE}/grievances/${selected}/attachments/${a.id}/content`} style={{ width: '100%' }} />
+                          </div>
+                        ));
+                      }
+                      return (
+                        <div className="voicebar">
+                          <button className="play" onClick={() => speak(detail.description ?? '', 'te-IN')} aria-label="Play"><Icon name="play" /></button>
+                          <div className="wave">{WAVE.map((h, i) => <i key={i} style={{ height: h, background: h > 18 ? 'var(--navy-600)' : undefined }} />)}</div>
+                          <span className="mono" style={{ fontSize: 12, color: 'var(--muted)' }}>TTS</span>
+                        </div>
+                      );
+                    })()}
                     <div className="transcript">
-                      <em>{bi('Transcribed & translated by Bhashini', 'భాషిణి ద్వారా లిప్యంతరీకరణ & అనువాదం')}</em>
-                      <span className="font-telugu" lang="te">{detail.description}</span>
-                      {detail.descriptionEn && <div style={{ marginTop: 6, color: 'var(--muted)', fontSize: 12 }}>EN: {detail.descriptionEn}</div>}
+                      <em>{bi('Transcript (original language) + working translation', 'లిప్యంతరీకరణ (అసలు భాష) + అనువాదం')}</em>
+                      <span className="font-telugu">{detail.description}</span>
+                      {detail.descriptionEn && detail.descriptionEn !== detail.description && /\p{L}{3,}/u.test(detail.descriptionEn) && (
+                        <div style={{ marginTop: 6, color: 'var(--muted)', fontSize: 12 }}>EN: {detail.descriptionEn}</div>
+                      )}
                     </div>
+                    {detail.summaryEn && (
+                      <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--muted)' }}>
+                        <Icon name="sparkle" style={{ width: 13, height: 13, verticalAlign: '-2px' }} /> <b>{bi('AI summary:', 'AI సారాంశం:')}</b> {detail.summaryEn}
+                      </div>
+                    )}
                   </div>
                   {/* evidence / documents */}
                   <div className="dsection">
@@ -225,6 +286,16 @@ export function WorkbenchView({ token, officer }: { token: string; officer: Offi
                   {['UNDER_ENQUIRY', 'ASSIGNED', 'ACTION_TAKEN'].includes(status) && <button className="btn btn-ghost" disabled={busy} onClick={() => act(() => api.post(`/grievances/${selected}/resolve`, { resolutionNote: note || 'Issue resolved.', evidenceIds: attachments.map((a) => a.id) }, token), bi('Resolved', 'పరిష్కరించబడింది'))}>{bi('Resolve', 'పరిష్కరించు')}</button>}
                   {['UNDER_ENQUIRY', 'ASSIGNED', 'ACTION_TAKEN'].includes(status) && <button className="btn btn-ghost" disabled={busy} onClick={() => act(() => api.post(`/grievances/${selected}/hold`, { reason: 'Awaiting citizen info' }, token), bi('On hold', 'హోల్డ్‌లో'))}>{bi('Hold', 'హోల్డ్')}</button>}
                   {status === 'ON_HOLD' && <button className="btn btn-ghost" disabled={busy} onClick={() => act(() => api.post(`/grievances/${selected}/resume`, {}, token), bi('Resumed', 'తిరిగి ప్రారంభం'))}>{bi('Resume', 'తిరిగి ప్రారంభించు')}</button>}
+                  {status === 'MERGED' && (
+                    <button
+                      className="btn btn-ghost"
+                      disabled={busy}
+                      title={bi('False merge? Unmerge re-enters the AI pipeline and trains dedupe.', 'తప్పు విలీనమా? అన్‌మర్జ్ AI పైప్‌లైన్‌లోకి తిరిగి ప్రవేశిస్తుంది.')}
+                      onClick={() => act(() => api.post(`/grievances/${selected}/unmerge`, {}, token), bi('Unmerged — re-triaged', 'అన్‌మర్జ్ — తిరిగి ట్రయాజ్'))}
+                    >
+                      ↩ {bi('Unmerge', 'అన్‌మర్జ్')}
+                    </button>
+                  )}
                 </div>
                 {note && (
                   <div style={{ padding: '0 20px 18px' }}>
@@ -293,12 +364,33 @@ function CoPilot({ detail, services, selected, token, bi, onLookup, busy }: { de
           </div>
         ))}
       </div>
+      {/* Officer briefing — what to check / ask / verify for THIS complaint */}
+      {ai?.officerBriefing?.length > 0 && (
+        <div className="aiseg">
+          <div className="lab"><Icon name="eye" />{bi('Officer briefing — for this case', 'అధికారి బ్రీఫింగ్ — ఈ కేసుకు')}</div>
+          {ai.officerBriefing.map((s: string, i: number) => (
+            <div className="lawitem" key={i}><Icon name="arrow" /><span>{s}</span></div>
+          ))}
+        </div>
+      )}
       {/* Suggested next actions */}
       {ai?.suggestedActions?.length > 0 && (
         <div className="aiseg">
           <div className="lab"><Icon name="check2" />{bi('Suggested next actions', 'సూచించిన చర్యలు')}</div>
           {ai.suggestedActions.map((s: string, i: number) => (
             <div className="lawitem" key={i}><Icon name="check2" /><span>{s}</span></div>
+          ))}
+        </div>
+      )}
+      {/* Inter-department — this case crosses department boundaries */}
+      {ai?.interDepartments?.length > 0 && (
+        <div className="aiseg">
+          <div className="lab"><Icon name="route" />{bi('Inter-department · share via X-Road', 'అంతర్-శాఖ · X-Road ద్వారా పంచుకోండి')}</div>
+          {ai.interDepartments.map((d: any, i: number) => (
+            <div className="suggest" key={i} style={{ marginTop: i ? 7 : 0 }}>
+              <div className="ic"><Icon name="route" /></div>
+              <div className="tx"><strong>{d.name} ({d.deptId})</strong><span>{d.why}</span></div>
+            </div>
           ))}
         </div>
       )}
@@ -321,8 +413,29 @@ function CoPilot({ detail, services, selected, token, bi, onLookup, busy }: { de
       </div>
       <div className="aiseg">
         <div className="lab"><Icon name="route" />{bi('Cross-dept verification · X-Road', 'క్రాస్-డిపార్ట్‌మెంట్ ధృవీకరణ · X-Road')}</div>
+        {/* AI-suggested lookups for THIS complaint, with the reason why */}
+        {ai?.xroadSuggestions?.length > 0 && (
+          <div style={{ marginBottom: 8 }}>
+            {ai.xroadSuggestions.map((s: any, i: number) => (
+              <button
+                key={s.service}
+                className="suggest"
+                style={{ width: '100%', textAlign: 'left', cursor: 'pointer', marginTop: i ? 7 : 0, border: '1px solid rgba(231,201,136,.35)' }}
+                onClick={() => onLookup(s.service)}
+                disabled={busy}
+              >
+                <div className="ic"><Icon name="sparkle" /></div>
+                <div className="tx"><strong>{s.label}</strong><span>{s.why} · {s.member}</span></div>
+                <span className="conf">→</span>
+              </button>
+            ))}
+          </div>
+        )}
         <div className="ai-cta" style={{ margin: 0, padding: 0 }}>
-          {services.slice(0, 4).map((s) => <button key={s.id} onClick={() => onLookup(s.id)} disabled={busy}>{s.label}</button>)}
+          {services
+            .filter((s) => !ai?.xroadSuggestions?.some((x: any) => x.service === s.id))
+            .slice(0, 4)
+            .map((s) => <button key={s.id} onClick={() => onLookup(s.id)} disabled={busy}>{s.label}</button>)}
         </div>
       </div>
     </div>

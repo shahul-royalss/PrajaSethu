@@ -11,6 +11,7 @@ import { LedgerModule } from '../ledger/ledger.module';
 import { NotificationModule } from '../notification/notification.module';
 import { LlmModule } from '../llm/llm.module';
 import { DataExchangeModule } from '../dataexchange/dataexchange.module';
+import { AttachmentsModule } from '../attachments/attachments.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { DataExchangeModule } from '../dataexchange/dataexchange.module';
     NotificationModule,
     LlmModule,
     DataExchangeModule,
+    AttachmentsModule,
   ],
   providers: [GrievancesService, OptionalAuthGuard],
   controllers: [GrievancesController],

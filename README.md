@@ -1,13 +1,33 @@
-# SAARTHI — Public Grievance Redressal · Government of India
+# SAARTHI 2.0 — Voice-First AI Grievance Intelligence · Government of India
 
 **A working pilot of a next-generation Public Grievance Redressal System (PGRS)**, built from
-[`docs/PrajaSetu-Blueprint.md`](docs/PrajaSetu-Blueprint.md). **SAARTHI** ("guide / charioteer") is multilingual-first,
-voice-first, and tamper-evident — designed to run in a single mandal/town before scaling. The brandmark is a charioteer's
-wheel (chakra), and the system asks every citizen to **choose their language first**, then conducts the whole
-grievance interview in that language by voice or text.
+[`docs/PrajaSetu-Blueprint.md`](docs/PrajaSetu-Blueprint.md) and upgraded to the **Saarthi 2.0 spec**
+(voice-first, autonomous department categorisation). **SAARTHI** ("guide / charioteer") is multilingual-first,
+voice-first, and tamper-evident — designed to run in a single mandal/town before scaling.
+
+**Saarthi 2.0 — how a complaint flows now.** The citizen never picks a department and never picks a language.
+They choose **Speak or Type**; the language is auto-detected live (Unicode-script analysis over the 22 scheduled
+languages + romanised Indic); the **original voice recording is preserved untouched** — its SHA-256 sealed on the
+ledger — and travels with the ticket to the department as evidence. A one-call **LLM extraction** (Claude when
+`ANTHROPIC_API_KEY` is set, KB-grounded heuristic otherwise) produces issue, bilingual summaries, severity/urgency
+(auditable rubrics) and a Stage-A department hint. A **Stage-B calibrated classifier** (nearest-centroid over the
+labelled AP grievance corpus in `apps/api/src/modules/classification/ap-grievance-corpus.ts`, fused with taxonomy
+keywords, temperature-scaled softmax) gives real probabilities, and the **95% gate** decides: auto-route (routedBy=AI,
+on the ledger) or a **human verification desk** whose decisions become `TrainingEvent`s that feed the classifier back
+(active learning). A **geo + semantic dedupe** (haversine ≤300 m + cross-surface similarity over original text /
+working translation / AI summary) merges duplicate reports into one canonical ticket with a report-count **priority
+ladder** (≥5 severity+1, ≥15 CRITICAL + duty alert) and a one-tap **unmerge** escape hatch. Citizens see the
+**officer's name, designation and department** on the tracker, can **call the department helpline**, ask the
+**Saarthi Copilot** about their case in their language, capture their **live GPS location** for the officer's map,
+and — if unsatisfied — request a reopen with a **mandatory typed or voice reason** that goes to a senior officer's
+**quick desk review** (AI explains why the citizen is reopening, against the resolution record and the citizen's
+background profile; the officer decides; both outcomes are notarised and SMS'd). Officers additionally get an
+AI **case briefing** (what to check/ask/verify), **X-Road lookup suggestions** tied to the complaint, and
+**inter-department routing** flags when a case crosses department boundaries — plus a full **block explorer** over
+the hash-chained ledger.
 
 This repository is the **pilot MVP** the blueprint calls for in Part H — the deliberately narrow cut that proves value
-and safety small. It compiles and runs end-to-end with **zero external services** (one command, SQLite, in-process
+and safety small. It compiles and runs end-to-end with **zero external services** (one command, in-process
 adapters), so you can see the whole grievance lifecycle work today.
 
 ---

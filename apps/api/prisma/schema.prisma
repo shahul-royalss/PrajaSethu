@@ -47,6 +47,7 @@ model Department {
   nameEn    String
   nameTe    String
   parent    String?
+  helpline  String?  // public phone number citizens can call for this department
   slaMatrix String   @default("{}") // JSON: { "<level>": hours }
 
   subjects   Subject[]
@@ -108,16 +109,40 @@ model Grievance {
   descriptionEn       String?
   voiceInputRef       String?
 
+  // ── Saarthi 2.0 language intelligence (auto-detected, never citizen-picked) ─
+  detectedLang        String?  // ISO 639 of the citizen's speech/text (auto)
+  langConfidence      Float?
+  codeSwitched        Boolean  @default(false)
+
+  // ── Saarthi 2.0 LLM extraction contract (§7.1) ──
+  issue               String?  // one-line issue statement
+  issueCategory       String?  // e.g. streetlight_outage
+  summaryEn           String?
+  summaryTe           String?
+  severity            String?  // LOW | MEDIUM | HIGH | CRITICAL (rubric §7.3)
+  urgency             String?  // LOW | MEDIUM | HIGH | IMMEDIATE
+  safetyFlag          Boolean  @default(false)
+  sentiment           String?
+  entities            String   @default("{}") // JSON extracted entities
+  interDepts          String   @default("[]") // JSON [{deptId,name,why}] — X-Road share suggestions
+
   aiSuggestedDeptId   String?
   aiSuggestedSubjectId String?
   aiConfidence        Float?
+  routedBy            String?  // AI (auto ≥95% gate) | HUMAN (verification desk)
 
   priorityScore       Float    @default(0)
   distressFlag        Boolean  @default(false)
   emergency           Boolean  @default(false)
 
+  // Live location captured at submit (with citizen consent) — sent to the officer.
   geoLat              Float?
   geoLng              Float?
+  geoAccuracy         Float?   // metres
+  geoCapturedAt       DateTime?
+
+  // Duplicate-merge (§9): crowd volume IS severity evidence.
+  reportCount         Int      @default(1)
   // Location of the grievance (may differ from the petitioner's address — per the form)
   district            String?
   mandal              String?
@@ -191,10 +216,11 @@ model WorkLog {
 model Attachment {
   id            String   @id @default(cuid())
   grievanceId   String
-  type          String   @default("DOCUMENT")
+  type          String   @default("DOCUMENT") // DOCUMENT | VOICE | REOPEN_VOICE
   filename      String?
   mime          String?
   sizeBytes     Int?
+  durationSec   Int?     // audio evidence length (voice complaints / reopen reasons)
   originalSizeBytes Int?
   dataBase64    String?  // pilot store (no MinIO) — base64 of the file bytes
   compressed    Boolean  @default(false)
@@ -232,7 +258,57 @@ model Reopen {
   reopenedAt     DateTime @default(now())
   escalatedLevel Int
 
+  // ── Quick desk review (Saarthi 2.0) — a reopen request is reviewed by a ──
+  // higher officer BEFORE the case reopens. The citizen must state a reason
+  // (typed or voice); the voice file travels with the case in its original
+  // language, and AI explains the likely reason + citizen background.
+  channel        String   @default("TEXT") // TEXT | VOICE
+  reasonLang     String?  // detected language of the reason
+  reasonAudioId  String?  // Attachment id of the voice reason (original audio)
+  aiReview       String?  // JSON — AI quick-desk-review analysis for the officer
+  reviewStatus   String   @default("APPLIED") // PENDING | REOPEN_APPROVED | CLOSURE_UPHELD | APPLIED (legacy direct reopen)
+  reviewerId     String?  // officer assigned to the desk review
+  reviewedById   String?
+  reviewedByName String?
+  reviewedAt     DateTime?
+  reviewNote     String?
+
   grievance Grievance @relation(fields: [grievanceId], references: [id])
+
+  @@index([grievanceId])
+}
+
+// ── Human verification queue — the 95% confidence gate (Saarthi 2.0 §8) ─────
+// When the AI classifier is below the gate (or the two stages disagree), a
+// District Grievance Officer confirms the department. The decision feeds the
+// active-learning loop (TrainingEvent).
+model VerificationTask {
+  id           String    @id @default(cuid())
+  grievanceId  String    @unique
+  suggestions  String    @default("[]") // JSON — AI top-3 [{deptId,name,probability}]
+  llmHint      String?   // Stage-A (LLM) department hint
+  rationale    String?   // extraction summary shown to the officer
+  status       String    @default("PENDING") // PENDING | DECIDED
+  assignedTo   String?
+  decidedDept  String?
+  decidedById  String?
+  decidedAt    DateTime?
+  slaDeadline  DateTime  // officer must act within 4 working hours
+  createdAt    DateTime  @default(now())
+
+  @@index([status])
+}
+
+// ── Active-learning loop (Saarthi 2.0 §8.4) — every human correction becomes ─
+// a labelled training example for the next classifier fine-tune.
+model TrainingEvent {
+  id           String   @id @default(cuid())
+  grievanceId  String
+  aiPrediction String?
+  aiConfidence Float?
+  humanLabel   String
+  source       String   // VERIFY | UNMERGE | REASSIGN | DESK_REVIEW
+  createdAt    DateTime @default(now())
 
   @@index([grievanceId])
 }

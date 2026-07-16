@@ -12,10 +12,18 @@ body {
   color: #0f172a;
 }
 
-/* Telugu glyphs use the Telugu stack for better legibility (Blueprint F.1). */
+/* Indic glyphs use dedicated Noto stacks for legibility (Blueprint F.1).
+   Mixed-script strings (very common) fall through the stack cleanly:
+   Latin renders in Inter, Telugu in Noto Telugu, Devanagari in Noto Devanagari,
+   and anything else in the platform's system Indic fonts. */
 .font-telugu,
 [lang='te'] {
-  font-family: 'Noto Sans Telugu', Inter, system-ui, sans-serif;
+  font-family: 'Noto Sans Telugu', 'Noto Sans Devanagari', Inter, system-ui, sans-serif;
+}
+[lang='hi'],
+[lang='mr'],
+[lang='ne'] {
+  font-family: 'Noto Sans Devanagari', Inter, system-ui, sans-serif;
 }
 
 /* Small entrance animation for panels that expand in place (e.g. the
@@ -32,6 +40,13 @@ body {
 }
 .animate-fade-up {
   animation: fade-up 0.28s ease-out;
+}
+
+/* In app mode (Android WebView, ?app=1) the bottom app-bar is visible at EVERY
+   width and already carries Back/Home — hide the header copies so the same
+   controls never appear twice on one screen. */
+html.saarthi-app-nav .hdr-navctl {
+  display: none !important;
 }
 
 /* Respect users who prefer reduced motion. */

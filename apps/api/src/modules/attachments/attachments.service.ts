@@ -21,7 +21,7 @@ export interface UploadInput {
 export class AttachmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async add(grievanceId: string, input: UploadInput, uploadedBy: string) {
+  async add(grievanceId: string, input: UploadInput, uploadedBy: string, kind: string = 'DOCUMENT') {
     const g = await this.prisma.grievance.findUnique({ where: { id: grievanceId } });
     if (!g) {
       // also allow lookup by public YSR code
@@ -36,26 +36,34 @@ export class AttachmentsService {
     return this.prisma.attachment.create({
       data: {
         grievanceId,
-        type: 'DOCUMENT',
+        type: kind,
         filename: input.filename?.slice(0, 200) ?? 'document',
         mime: input.mime ?? 'application/octet-stream',
         sizeBytes,
         originalSizeBytes: sizeBytes,
         dataBase64: b64,
         uploadedBy,
-        hash: sha256(b64).slice(0, 32),
+        // Full SHA-256 — the evidentiary fingerprint anchored to the audit ledger
+        // (a truncated hash would weaken the "audio untouched" guarantee).
+        hash: sha256(b64),
       },
-      select: { id: true, filename: true, mime: true, sizeBytes: true, compressed: true, createdAt: true },
+      select: { id: true, type: true, filename: true, mime: true, sizeBytes: true, compressed: true, createdAt: true, hash: true },
     });
   }
 
   async list(grievanceId: string) {
+    // Accept id or public YSR (the citizen-side player only knows the YSR).
+    const g = await this.prisma.grievance.findUnique({ where: { id: grievanceId } });
+    if (!g) {
+      const byYsr = await this.prisma.grievance.findUnique({ where: { ysr: grievanceId } });
+      if (byYsr) grievanceId = byYsr.id;
+    }
     return this.prisma.attachment.findMany({
       where: { grievanceId },
       orderBy: { createdAt: 'asc' },
       select: {
-        id: true, filename: true, mime: true, sizeBytes: true, originalSizeBytes: true,
-        compressed: true, uploadedBy: true, createdAt: true,
+        id: true, type: true, filename: true, mime: true, sizeBytes: true, durationSec: true, originalSizeBytes: true,
+        compressed: true, uploadedBy: true, createdAt: true, hash: true,
       },
     });
   }

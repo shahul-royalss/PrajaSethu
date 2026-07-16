@@ -5,7 +5,7 @@
 import type { IconName } from './Icon';
 
 export type ViewId =
-  | 'overview' | 'workbench' | 'grievances' | 'gis' | 'analytics' | 'citizens' | 'audit' | 'admin';
+  | 'overview' | 'workbench' | 'verify' | 'desk' | 'grievances' | 'gis' | 'analytics' | 'citizens' | 'audit' | 'admin';
 
 export interface NavDef {
   id: ViewId; icon: IconName; en: string; te: string; roles: string[];
@@ -16,6 +16,8 @@ export interface NavDef {
 export const NAV: NavDef[] = [
   { id: 'overview', icon: 'grid', en: 'District Command', te: 'జిల్లా కమాండ్', roles: ['SUPERVISOR', 'COLLECTOR', 'AUDITOR'], group: 'ops' },
   { id: 'workbench', icon: 'layers', en: 'Officer Workbench', te: 'అధికారి వర్క్‌బెంచ్', roles: ['OFFICER', 'SUPERVISOR', 'COLLECTOR'], group: 'ops' },
+  { id: 'verify', icon: 'sparkle', en: 'AI Gate · Verify', te: 'AI గేట్ · ధృవీకరణ', roles: ['DA', 'OFFICER', 'SUPERVISOR', 'COLLECTOR'], group: 'ops' },
+  { id: 'desk', icon: 'scale', en: 'Desk Review', te: 'డెస్క్ సమీక్ష', roles: ['OFFICER', 'SUPERVISOR', 'COLLECTOR', 'AUDITOR'], group: 'ops' },
   { id: 'grievances', icon: 'inbox', en: 'All Grievances', te: 'అన్ని ఫిర్యాదులు', roles: ['SUPERVISOR', 'COLLECTOR', 'AUDITOR'], group: 'ops' },
   { id: 'gis', icon: 'map', en: 'GIS & Hotspots', te: 'GIS & హాట్‌స్పాట్‌లు', roles: ['SUPERVISOR', 'COLLECTOR', 'AUDITOR'], group: 'intel' },
   { id: 'analytics', icon: 'chart', en: 'Analytics', te: 'విశ్లేషణ', roles: ['SUPERVISOR', 'COLLECTOR', 'AUDITOR'], group: 'intel' },
