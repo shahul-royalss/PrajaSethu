@@ -66,7 +66,7 @@ export const DEPARTMENT_KB: DeptKnowledge[] = [
   },
   {
     deptId: 'PR', name: 'Panchayat Raj & Rural Development', category: 'NON_FINANCE',
-    keywords: ['panchayat', 'street light', 'drainage', 'garbage', 'sanitation', 'cc road', 'mgnrega', 'job card', 'wages', 'వీధి దీపం', 'డ్రైనేజీ', 'పారిశుధ్యం'],
+    keywords: ['panchayat', 'street light', 'streetlight', 'streetlights', 'drainage', 'drain', 'garbage', 'sanitation', 'sewage', 'cc road', 'mgnrega', 'job card', 'wages', 'వీధి దీపం', 'వీధి దీపాలు', 'డ్రైనేజీ', 'పారిశుధ్యం', 'చెత్త', 'మురుగు'],
     grievanceTypes: ['Streetlight not working', 'Drainage/sewage overflow', 'Garbage not cleared', 'Internal CC road damaged', 'MGNREGA wages/job card', 'Drinking water in habitation'],
     rootCauses: ['Panchayat maintenance fund/staff shortage', 'Blocked or broken drain / no desilting', 'Sanitation worker / vehicle not deployed', 'Estimate/work order pending sanction', 'MGNREGA muster/payment data lapse', 'Contractor delay on the sanctioned work'],
     orders: ['AP Panchayat Raj Act, 1994', 'MGNREGA operational guidelines', '15th Finance Commission grant norms', 'Swachh Bharat (Gramin) guidelines'],

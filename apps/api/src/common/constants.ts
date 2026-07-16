@@ -62,16 +62,18 @@ export type ApplicantTypeType = (typeof ApplicantType)[keyof typeof ApplicantTyp
 // "PGRS" code (configurable via TRACKING_PREFIX) so it isn't tied to a past govt.
 export const TRACKING_PREFIX = process.env.TRACKING_PREFIX ?? 'PGRS';
 
-// Grievance lifecycle states (Blueprint Part E.2)
+// Grievance lifecycle states (Blueprint Part E.2 + Saarthi 2.0)
 export const Status = {
   DRAFT: 'DRAFT',
   REGISTERED: 'REGISTERED',
+  PENDING_VERIFICATION: 'PENDING_VERIFICATION', // AI below the 95% gate → human verification desk (§8)
   CLASSIFIED: 'CLASSIFIED',
   ASSIGNED: 'ASSIGNED',
   UNDER_ENQUIRY: 'UNDER_ENQUIRY',
   ACTION_TAKEN: 'ACTION_TAKEN',
   RESOLVED: 'RESOLVED',
   CLOSED: 'CLOSED',
+  QUICK_DESK_REVIEW: 'QUICK_DESK_REVIEW', // citizen asked to reopen → higher officer reviews first
   REOPENED: 'REOPENED',
   ON_HOLD: 'ON_HOLD',
   REROUTED: 'REROUTED', // wrong type → service request / RTI desk
@@ -79,6 +81,17 @@ export const Status = {
   REJECTED: 'REJECTED', // invalid, with reason (appealable)
 } as const;
 export type StatusType = (typeof Status)[keyof typeof Status];
+
+// Saarthi 2.0 severity / urgency rubrics (§7.3) — LLM-scored, auditable.
+export const Severity = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', CRITICAL: 'CRITICAL' } as const;
+export type SeverityType = (typeof Severity)[keyof typeof Severity];
+export const Urgency = { LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH', IMMEDIATE: 'IMMEDIATE' } as const;
+export type UrgencyType = (typeof Urgency)[keyof typeof Urgency];
+
+// The confidence gate: the AI auto-routes ONLY at/above this; below it (or on
+// stage disagreement) a District Grievance Officer decides (§8.3).
+export const AUTO_ROUTE_GATE = 0.95;
+export const VERIFICATION_SLA_HOURS = 4;
 
 // Escalation ladder (statutory spirit — Blueprint A.2)
 export const Levels: Record<number, string> = {
@@ -110,8 +123,18 @@ export const LedgerEvent = {
   SLA_PREDICTED_BREACH: 'SLA_PREDICTED_BREACH',
   REROUTED: 'REROUTED',
   MERGED: 'MERGED',
+  UNMERGED: 'UNMERGED',
   REJECTED: 'REJECTED',
   XROAD_LOOKUP: 'XROAD_LOOKUP',
+  // Saarthi 2.0 events
+  AI_TRIAGED: 'AI_TRIAGED', // extraction + classifier + gate outcome (auditable AI)
+  PENDING_VERIFICATION: 'PENDING_VERIFICATION',
+  HUMAN_VERIFIED: 'HUMAN_VERIFIED', // District Grievance Officer confirmed the department
+  DUPLICATE_MERGED: 'DUPLICATE_MERGED', // geo+semantic dedupe merged into a canonical case
+  PRIORITY_RAISED: 'PRIORITY_RAISED', // report-count priority ladder fired
+  DESK_REVIEW_STARTED: 'DESK_REVIEW_STARTED', // citizen reopen request entered quick desk review
+  DESK_REVIEW_DECIDED: 'DESK_REVIEW_DECIDED',
+  VOICE_EVIDENCE_SEALED: 'VOICE_EVIDENCE_SEALED', // sha-256 of the original audio anchored
 } as const;
 export type LedgerEventType = (typeof LedgerEvent)[keyof typeof LedgerEvent];
 

@@ -12,6 +12,8 @@ import { NAV, ViewId } from './nav';
 import { useBi } from './bi';
 import { OverviewView } from './views/Overview';
 import { WorkbenchView } from './views/Workbench';
+import { VerifyView } from './views/Verify';
+import { DeskReviewView } from './views/DeskReview';
 import { GisView } from './views/Gis';
 import { AnalyticsView } from './views/Analytics';
 import { GrievancesView } from './views/Grievances';
@@ -22,6 +24,8 @@ export type { ViewId } from './nav';
 const TITLES: Record<ViewId, { en: string; te: string; ctxEn: string; ctxTe: string }> = {
   overview: { en: 'District Command Center', te: 'జిల్లా కమాండ్ సెంటర్', ctxEn: 'Andhra Pradesh · Real-Time Governance', ctxTe: 'ఆంధ్రప్రదేశ్ · రియల్-టైమ్ గవర్నెన్స్' },
   workbench: { en: 'Officer AI Workbench', te: 'అధికారి AI వర్క్‌బెంచ్', ctxEn: 'Saarthi has pre-analysed each case', ctxTe: 'సారథి ప్రతి కేసును ముందే విశ్లేషించింది' },
+  verify: { en: 'AI Gate · Human Verification', te: 'AI గేట్ · మానవ ధృవీకరణ', ctxEn: 'Below-95% cases · your decision trains the model', ctxTe: '95% కంటే తక్కువ కేసులు · మీ నిర్ణయం మోడల్‌ను నేర్పుతుంది' },
+  desk: { en: 'Quick Desk Review', te: 'త్వరిత డెస్క్ సమీక్ష', ctxEn: 'Citizen reopen requests · officer decides', ctxTe: 'పౌర రీఓపెన్ అభ్యర్థనలు · అధికారి నిర్ణయం' },
   grievances: { en: 'All Grievances', te: 'అన్ని ఫిర్యాదులు', ctxEn: 'District-wide register', ctxTe: 'జిల్లా రిజిస్టర్' },
   gis: { en: 'GIS Intelligence & Hotspots', te: 'GIS ఇంటెలిజెన్స్ & హాట్‌స్పాట్‌లు', ctxEn: 'Spatial clustering', ctxTe: 'ప్రాదేశిక క్లస్టరింగ్' },
   analytics: { en: 'Analytics & Predictions', te: 'విశ్లేషణ & అంచనాలు', ctxEn: 'Executive view', ctxTe: 'ఎగ్జిక్యూటివ్ వీక్షణ' },
@@ -210,6 +214,8 @@ export function Console({ token, officer }: { token: string; officer: Officer })
                   <OverviewView token={token} officer={officer} onOpenWorkbench={allowed.includes('workbench') ? () => setView('workbench') : undefined} />
                 )}
                 {view === 'workbench' && <WorkbenchView token={token} officer={officer} />}
+                {view === 'verify' && <VerifyView token={token} />}
+                {view === 'desk' && <DeskReviewView token={token} />}
                 {view === 'grievances' && <GrievancesView token={token} />}
                 {view === 'gis' && <GisView token={token} />}
                 {view === 'analytics' && <AnalyticsView token={token} />}

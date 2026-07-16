@@ -6,6 +6,7 @@ import {
   IsLatitude,
   IsLongitude,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   Max,
@@ -34,9 +35,11 @@ export class CreateGrievanceDto {
   voiceInputRef?: string;
 
   // Petitioner — Aadhaar is optional (mobile-only citizens are supported).
+  // Mobile is optional for AUTHENTICATED citizens (identity comes from the JWT);
+  // anonymous/assisted intake still requires it (enforced in the service).
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  mobile!: string;
+  mobile?: string;
 
   @IsOptional()
   @IsString()
@@ -132,6 +135,7 @@ export class CreateGrievanceDto {
   @IsArray()
   consentScope?: string[];
 
+  // ── Live location captured at submit (with consent) — sent to the officer ──
   @IsOptional()
   @IsLatitude()
   geoLat?: number;
@@ -139,6 +143,97 @@ export class CreateGrievanceDto {
   @IsOptional()
   @IsLongitude()
   geoLng?: number;
+
+  @IsOptional()
+  @IsNumber()
+  geoAccuracy?: number;
+
+  // ── Saarthi 2.0 — auto-detected language (client-side live detection) ──
+  @IsOptional()
+  @IsString()
+  detectedLang?: string;
+
+  @IsOptional()
+  @IsNumber()
+  langConfidence?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  codeSwitched?: boolean;
+
+  // ── Saarthi 2.0 — original voice recording (evidence; travels untouched) ──
+  @IsOptional()
+  @IsString()
+  voiceBase64?: string;
+
+  @IsOptional()
+  @IsString()
+  voiceMime?: string;
+
+  @IsOptional()
+  @IsNumber()
+  voiceDurationSec?: number;
+}
+
+// Citizen asks to reopen — reason is MANDATORY (typed or voice). The request
+// goes to a senior officer's quick desk review, never straight to reopen.
+export class ReopenRequestDto {
+  @IsOptional()
+  @IsString()
+  reason?: string; // typed reason, or the live transcript of the voice reason
+
+  @IsOptional()
+  @IsString()
+  lang?: string;
+
+  @IsOptional()
+  @IsString()
+  voiceBase64?: string;
+
+  @IsOptional()
+  @IsString()
+  voiceMime?: string;
+
+  @IsOptional()
+  @IsNumber()
+  voiceDurationSec?: number;
+}
+
+export class DeskReviewDecisionDto {
+  @IsIn(['REOPEN', 'UPHOLD'])
+  decision!: 'REOPEN' | 'UPHOLD';
+
+  @IsString()
+  @IsNotEmpty()
+  note!: string;
+}
+
+export class VerificationDecisionDto {
+  @IsString()
+  @IsNotEmpty()
+  deptId!: string;
+
+  @IsOptional()
+  @IsString()
+  subjectId?: string;
+
+  @IsOptional()
+  @IsIn(CATEGORY_VALUES)
+  category?: string;
+}
+
+export class CopilotAskDto {
+  @IsString()
+  @IsNotEmpty()
+  question!: string;
+
+  @IsOptional()
+  @IsString()
+  ysr?: string;
+
+  @IsOptional()
+  @IsString()
+  lang?: string;
 }
 
 export class ConfirmClassificationDto {

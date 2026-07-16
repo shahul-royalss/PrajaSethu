@@ -150,6 +150,87 @@ export type MicStatus = 'idle' | 'listening' | 'denied' | 'error' | 'unsupported
  * SCRIPT. Interim results stream live, and microphone-permission / no-speech
  * errors surface as a clear status instead of failing silently.
  */
+/**
+ * CONTINUOUS speech recognition that runs alongside the MediaRecorder during a
+ * voice complaint: it streams a live transcript (for the silent language badge
+ * + the working text sent to the AI) while the recording itself never stops
+ * until the citizen presses Stop. Auto-restarts on the engine's internal
+ * timeouts so the transcript keeps flowing for long recordings.
+ */
+export function useContinuousTranscript(langTag: string) {
+  const [supported, setSupported] = useState(false);
+  const [finalText, setFinalText] = useState('');
+  const [interim, setInterim] = useState('');
+  const recRef = useRef<any>(null);
+  const runningRef = useRef(false);
+  const langRef = useRef(langTag);
+  langRef.current = langTag;
+
+  useEffect(() => {
+    const SR =
+      (typeof window !== 'undefined' &&
+        ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)) ||
+      null;
+    setSupported(!!SR);
+  }, []);
+
+  const spin = useCallback(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR || !runningRef.current) return;
+    try {
+      const rec = new SR();
+      rec.lang = langRef.current;
+      rec.interimResults = true;
+      rec.continuous = true;
+      rec.maxAlternatives = 1;
+      rec.onresult = (e: any) => {
+        let interimNow = '';
+        let finalNow = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const r = e.results[i];
+          if (r.isFinal) finalNow += r[0].transcript;
+          else interimNow += r[0].transcript;
+        }
+        if (finalNow) setFinalText((prev) => (prev ? prev + ' ' : '') + finalNow.trim());
+        setInterim(interimNow);
+      };
+      // The engine stops itself periodically (and on brief silences) — restart
+      // quietly so the citizen is never interrupted.
+      rec.onend = () => {
+        setInterim('');
+        if (runningRef.current) setTimeout(() => spin(), 120);
+      };
+      rec.onerror = (e: any) => {
+        if (e?.error === 'not-allowed' || e?.error === 'service-not-allowed') runningRef.current = false;
+      };
+      recRef.current = rec;
+      rec.start();
+    } catch {
+      /* transcript is progressive enhancement — audio is the evidence */
+    }
+  }, []);
+
+  const begin = useCallback(() => {
+    setFinalText('');
+    setInterim('');
+    runningRef.current = true;
+    spin();
+  }, [spin]);
+
+  const end = useCallback(() => {
+    runningRef.current = false;
+    try {
+      recRef.current?.stop();
+    } catch {
+      /* no-op */
+    }
+  }, []);
+
+  useEffect(() => () => { runningRef.current = false; try { recRef.current?.stop(); } catch { /* no-op */ } }, []);
+
+  return { supported, finalText, interim, begin, end, setFinalText };
+}
+
 export function useSpeechInput(
   langTag: string,
   onFinal: (text: string) => void,

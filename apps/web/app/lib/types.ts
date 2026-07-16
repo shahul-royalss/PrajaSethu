@@ -21,8 +21,23 @@ export interface PublicGrievance {
   ysr: string;
   status: string;
   category: string;
-  department: Bilingual | null;
+  department: (Bilingual & { helpline?: string | null }) | null;
   subject: Bilingual | null;
+  officer: { name: string; designation: string | null } | null;
+  routedBy: string | null;
+  aiConfidence: number | null;
+  severity: string | null;
+  urgency: string | null;
+  summary: { en: string | null; te: string | null };
+  language: { code: string; confidence: number | null; codeSwitched: boolean; en: string; native: string } | null;
+  reportCount: number;
+  mergedFrom: { ysr: string } | null;
+  location: {
+    district: string | null;
+    mandal: string | null;
+    village: string | null;
+    geo: { lat: number; lng: number; accuracy: number | null; capturedAt: string | null } | null;
+  };
   plainStatus: PlainStatus;
   slaDueAt: string | null;
   slaBreachPredicted: boolean;
@@ -31,7 +46,39 @@ export interface PublicGrievance {
   createdAt: string;
   resolvedAt: string | null;
   closedAt: string | null;
+  voiceAttachments: { id: string; type: string; mime: string; createdAt: string }[];
+  deskReview: {
+    status: string;
+    reason: string | null;
+    channel: string;
+    requestedAt: string;
+    reviewedByName: string | null;
+    reviewNote: string | null;
+    reviewedAt: string | null;
+  } | null;
   timeline: TimelineEvent[];
+}
+
+export interface ChainBlock {
+  seq: number;
+  eventType: string;
+  actorRole: string;
+  grievanceId: string | null;
+  ysr: string | null;
+  payload: unknown;
+  payloadHash: string;
+  prevHash: string;
+  blockHash: string;
+  ledgerTxId: string;
+  ts: string;
+  verified: boolean;
+}
+
+export interface ChainFeed {
+  blocks: ChainBlock[];
+  total: number;
+  head: { seq: number; blockHash: string; ts: string } | null;
+  genesisPrev: string;
 }
 
 export interface VerifyResult {
@@ -53,10 +100,20 @@ export interface ListGrievance {
   priorityScore: number;
   distressFlag: boolean;
   emergency: boolean;
+  severity?: string | null;
+  urgency?: string | null;
+  reportCount?: number;
+  routedBy?: string | null;
+  detectedLang?: string | null;
   slaDueAt: string | null;
   slaBreachPredicted: boolean;
   currentLevel: number;
   createdAt: string;
+  // citizen list extras
+  officer?: { id: string; name: string; designation: string | null } | null;
+  summaryEn?: string | null;
+  issue?: string | null;
+  village?: string | null;
 }
 
 export interface ClassificationPreview {

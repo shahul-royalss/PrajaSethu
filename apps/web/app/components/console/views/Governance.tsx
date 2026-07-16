@@ -53,6 +53,9 @@ function Audit({ token }: { token: string }) {
         </div></div>
       </div>
 
+      {/* ── Block explorer — the chain itself, block by block ── */}
+      <ChainExplorer token={token} />
+
       <div className="card tablecard" style={{ marginTop: 16 }}>
         <div className="panel-head" style={{ padding: '16px 18px' }}><h2>{bi('Access transparency · X-Road exchange log', 'యాక్సెస్ పారదర్శకత · X-Road లాగ్')}</h2><span className="hint">{bi('consent-gated · signed · logged', 'సమ్మతి · సంతకం · లాగ్')}</span></div>
         <table className="tbl">
@@ -71,6 +74,147 @@ function Audit({ token }: { token: string }) {
         </table>
       </div>
     </section>
+  );
+}
+
+// ── Block explorer — every governance action as a sealed, chained block ─────
+interface ChainBlock {
+  seq: number;
+  eventType: string;
+  actorRole: string;
+  ysr: string | null;
+  payload: unknown;
+  payloadHash: string;
+  prevHash: string;
+  blockHash: string;
+  ledgerTxId: string;
+  ts: string;
+  verified: boolean;
+}
+
+const EVENT_ICON: Record<string, string> = {
+  GENESIS: '🌱', REGISTERED: '📥', AI_TRIAGED: '🤖', PENDING_VERIFICATION: '🧑‍⚖️', HUMAN_VERIFIED: '✅',
+  CLASSIFIED: '🗂', ASSIGNED: '👮', REASSIGNED: '🔀', ACCEPTED: '🤝', UNDER_ENQUIRY: '🔎',
+  ACTION_TAKEN: '🛠', RESOLVED: '✅', CITIZEN_CONFIRMED: '🙏', CLOSED: '🔒', REOPENED: '🔁',
+  ESCALATED: '📈', SLA_BREACHED: '⏰', SLA_PREDICTED_BREACH: '⚠️', XROAD_LOOKUP: '🔗',
+  DUPLICATE_MERGED: '🤝', UNMERGED: '↩️', PRIORITY_RAISED: '📢', DESK_REVIEW_STARTED: '⚖️',
+  DESK_REVIEW_DECIDED: '🧾', VOICE_EVIDENCE_SEALED: '🎙', MERGED: '🤝', REJECTED: '⛔', ON_HOLD: '⏸', RESUMED: '▶️',
+};
+
+function ChainExplorer({ token }: { token: string }) {
+  const bi = useBi();
+  const [feed, setFeed] = useState<{ blocks: ChainBlock[]; total: number; head: { seq: number; blockHash: string } | null } | null>(null);
+  const [openSeq, setOpenSeq] = useState<number | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  useEffect(() => {
+    api.get<any>('/ledger/chain?limit=25', token).then(setFeed).catch(() => {});
+  }, [token]);
+
+  async function loadMore() {
+    if (!feed || feed.blocks.length === 0) return;
+    setLoadingMore(true);
+    try {
+      const oldest = feed.blocks[feed.blocks.length - 1].seq;
+      const more = await api.get<any>(`/ledger/chain?limit=25&before=${oldest}`, token);
+      setFeed((f) => (f ? { ...f, blocks: [...f.blocks, ...more.blocks] } : more));
+    } catch {
+      /* keep what we have */
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  const short = (h: string, n = 14) => `${h.slice(0, n)}…`;
+
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="panel-head" style={{ padding: '16px 18px' }}>
+        <h2>⛓ {bi('Block explorer — hash-chained governance ledger', 'బ్లాక్ ఎక్స్‌ప్లోరర్ — హాష్-చైన్డ్ లెడ్జర్')}</h2>
+        <span className="hint">
+          {feed?.head
+            ? bi(`head #${feed.head.seq} · ${feed.total} blocks · anchored`, `హెడ్ #${feed.head.seq} · ${feed.total} బ్లాక్‌లు`)
+            : '…'}
+        </span>
+      </div>
+      <div className="cardbody" style={{ paddingTop: 6 }}>
+        {!feed && <div style={{ color: 'var(--faint)', fontSize: 13, padding: 12 }}>{bi('Loading chain…', 'చైన్ లోడ్ అవుతోంది…')}</div>}
+        {feed?.blocks.map((b, i) => {
+          const open = openSeq === b.seq;
+          const nextInList = feed.blocks[i + 1]; // one seq lower — the block this one points to
+          const linkOk = !nextInList || b.prevHash === nextInList.blockHash || b.seq - nextInList.seq !== 1;
+          return (
+            <div key={b.seq} style={{ position: 'relative', paddingLeft: 30 }}>
+              {/* chain spine + link */}
+              {i < feed.blocks.length - 1 && (
+                <span
+                  aria-hidden
+                  style={{
+                    position: 'absolute', left: 11, top: 30, bottom: -4, width: 2,
+                    background: linkOk ? 'linear-gradient(180deg, rgba(45,91,215,.5), rgba(45,91,215,.12))' : 'var(--bad)',
+                  }}
+                />
+              )}
+              <span
+                aria-hidden
+                style={{
+                  position: 'absolute', left: 2, top: 10, width: 20, height: 20, borderRadius: 6,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: b.verified ? 'var(--navy-700, #143071)' : 'var(--bad)',
+                  color: '#fff', fontSize: 10, fontWeight: 800,
+                }}
+              >
+                {b.verified ? '✓' : '!'}
+              </span>
+
+              <button
+                onClick={() => setOpenSeq(open ? null : b.seq)}
+                style={{
+                  width: '100%', textAlign: 'left', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8,
+                  padding: '9px 10px', margin: '2px 0', borderRadius: 10, border: '1px solid var(--line)',
+                  background: open ? 'var(--royal-soft, #E8EEFC)' : '#fff', cursor: 'pointer',
+                }}
+                aria-expanded={open}
+              >
+                <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: 'var(--royal)' }}>#{b.seq}</span>
+                <span style={{ fontSize: 14 }} aria-hidden>{EVENT_ICON[b.eventType] ?? '▪️'}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700 }}>{b.eventType.replace(/_/g, ' ')}</span>
+                {b.ysr && <span className="gid" style={{ fontSize: 11 }}>{b.ysr}</span>}
+                <span style={{ fontSize: 11, color: 'var(--muted)' }}>{b.actorRole}</span>
+                <span className="mono" style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--faint)' }}>{short(b.blockHash, 10)}</span>
+                <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>{new Date(b.ts).toLocaleTimeString()}</span>
+              </button>
+
+              {open && (
+                <div style={{ margin: '2px 0 8px', border: '1px solid var(--line)', borderRadius: 10, padding: 12, background: '#0D2150', color: '#DCE6FA' }}>
+                  <div style={{ display: 'grid', gap: 4, fontFamily: "'IBM Plex Mono',monospace", fontSize: 11, lineHeight: 1.6, overflowWrap: 'anywhere' }}>
+                    <div><span style={{ color: '#8FA6D6' }}>block   </span>{b.blockHash}</div>
+                    <div><span style={{ color: '#8FA6D6' }}>prev    </span>{b.prevHash}</div>
+                    <div><span style={{ color: '#8FA6D6' }}>payload </span>{b.payloadHash}</div>
+                    <div><span style={{ color: '#8FA6D6' }}>tx      </span>{b.ledgerTxId}</div>
+                    <div><span style={{ color: '#8FA6D6' }}>time    </span>{new Date(b.ts).toISOString()}</div>
+                    <div>
+                      <span style={{ color: '#8FA6D6' }}>verify  </span>
+                      <span style={{ color: b.verified ? '#7CE3B1' : '#FF9B9B', fontWeight: 700 }}>
+                        {b.verified ? bi('recomputed hashes match — block intact', 'హాష్‌లు సరిపోలాయి — బ్లాక్ చెక్కుచెదరలేదు') : bi('HASH MISMATCH — tampered', 'హాష్ తేడా — ట్యాంపర్')}
+                      </span>
+                    </div>
+                  </div>
+                  <pre style={{ marginTop: 10, padding: 10, borderRadius: 8, background: 'rgba(255,255,255,.06)', fontSize: 11, lineHeight: 1.55, overflowX: 'auto' }}>
+                    {JSON.stringify(b.payload, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {feed && feed.blocks.length < feed.total && (
+          <button className="btn btn-ghost" style={{ marginTop: 10 }} onClick={loadMore} disabled={loadingMore}>
+            {loadingMore ? '…' : bi(`Load older blocks (${feed.total - feed.blocks.length} more)`, `పాత బ్లాక్‌లు (${feed.total - feed.blocks.length})`)}
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 

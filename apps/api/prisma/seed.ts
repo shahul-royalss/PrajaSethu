@@ -30,6 +30,9 @@ function minutesAgo(n: number): Date {
 async function main() {
   // Quiet bootstrap; disable the background SLA sweep while we craft demo states.
   process.env.SLA_SWEEP_DISABLED = 'true';
+  // Seed deterministically with the heuristic AI path (fast, no network); the
+  // live app still uses Claude for extraction/analysis when a key is set.
+  delete process.env.ANTHROPIC_API_KEY;
   const app = await NestFactory.createApplicationContext(AppModule, { logger: ['error', 'warn'] });
   const prisma = app.get(PrismaService);
   const grievances = app.get(GrievancesService);
@@ -39,6 +42,8 @@ async function main() {
   await prisma.dataExchangeLog.deleteMany();
   await prisma.notificationLog.deleteMany();
   await prisma.auditEvent.deleteMany();
+  await prisma.trainingEvent.deleteMany();
+  await prisma.verificationTask.deleteMany();
   await prisma.feedback.deleteMany();
   await prisma.reopen.deleteMany();
   await prisma.escalation.deleteMany();
@@ -57,14 +62,17 @@ async function main() {
   const ledger = app.get(LedgerService);
   await ledger.append({ eventType: 'GENESIS', actorRole: 'SYSTEM', payload: { system: 'praja-setu', pilot: PILOT_MANDAL } });
 
-  // ── Departments (pilot top-5 by volume + a confidential vigilance desk) ──
+  // ── Departments (pilot top depts by volume + vigilance) with public helplines ──
   const departments = [
-    { id: 'CS', nameEn: 'Civil Supplies', nameTe: 'పౌర సరఫరాలు' },
-    { id: 'PEN', nameEn: 'Pensions', nameTe: 'పెన్షన్లు' },
-    { id: 'ENERGY', nameEn: 'Energy (APSPDCL)', nameTe: 'విద్యుత్ (APSPDCL)' },
-    { id: 'RWS', nameEn: 'Rural Water Supply', nameTe: 'గ్రామీణ నీటి సరఫరా' },
-    { id: 'REVENUE', nameEn: 'Revenue (Land)', nameTe: 'రెవెన్యూ (భూమి)' },
-    { id: 'VIG', nameEn: 'Vigilance / Anti-Corruption', nameTe: 'విజిలెన్స్ / అవినీతి నిరోధక' },
+    { id: 'CS', nameEn: 'Civil Supplies', nameTe: 'పౌర సరఫరాలు', helpline: '1967' },
+    { id: 'PEN', nameEn: 'Pensions', nameTe: 'పెన్షన్లు', helpline: '14567' },
+    { id: 'ENERGY', nameEn: 'Energy (APSPDCL)', nameTe: 'విద్యుత్ (APSPDCL)', helpline: '1912' },
+    { id: 'RWS', nameEn: 'Rural Water Supply', nameTe: 'గ్రామీణ నీటి సరఫరా', helpline: '1916' },
+    { id: 'REVENUE', nameEn: 'Revenue (Land)', nameTe: 'రెవెన్యూ (భూమి)', helpline: '1100' },
+    { id: 'PR', nameEn: 'Panchayat Raj (Streetlights & Sanitation)', nameTe: 'పంచాయతీ రాజ్ (వీధి దీపాలు & పారిశుధ్యం)', helpline: '1100' },
+    { id: 'RB', nameEn: 'Roads & Buildings', nameTe: 'రహదారులు & భవనాలు', helpline: '1100' },
+    { id: 'HEALTH', nameEn: 'Health & Family Welfare', nameTe: 'వైద్య ఆరోగ్య శాఖ', helpline: '104' },
+    { id: 'VIG', nameEn: 'Vigilance / Anti-Corruption', nameTe: 'విజిలెన్స్ / అవినీతి నిరోధక', helpline: '14400' },
   ];
   for (const d of departments) {
     await prisma.department.create({ data: { ...d, slaMatrix: JSON.stringify({ 1: 168, 2: 120, 3: 72, 4: 48 }) } });
@@ -79,6 +87,10 @@ async function main() {
     { id: 'ENERGY_BILL', deptId: 'ENERGY', nameEn: 'Wrong / high electricity bill', nameTe: 'తప్పు విద్యుత్ బిల్లు', cat: Category.NON_FINANCE, sla: 120, kw: ['bill', 'high bill', 'wrong bill', 'బిల్లు'] },
     { id: 'RWS_BOREWELL', deptId: 'RWS', nameEn: 'Borewell / drinking water', nameTe: 'బోరు / తాగు నీరు', cat: Category.NON_FINANCE, sla: 96, kw: ['borewell', 'bore', 'బోరు', 'water', 'నీళ్లు', 'drinking water', 'hand pump', 'tap'] },
     { id: 'REVENUE_MUTATION', deptId: 'REVENUE', nameEn: 'Land mutation / record', nameTe: 'భూమి మ్యుటేషన్', cat: Category.NON_FINANCE, sla: 168, kw: ['land', 'mutation', 'భూమి', 'survey', 'patta', 'record', 'pahani'] },
+    { id: 'PR_STREETLIGHT', deptId: 'PR', nameEn: 'Streetlight not working', nameTe: 'వీధి దీపాలు పనిచేయవు', cat: Category.NON_FINANCE, sla: 120, kw: ['street light', 'streetlight', 'streetlights', 'వీధి దీపం', 'వీధి దీపాలు', 'lights not working', 'dark street', 'lamp post'] },
+    { id: 'PR_SANITATION', deptId: 'PR', nameEn: 'Drainage / garbage / sanitation', nameTe: 'డ్రైనేజీ / చెత్త / పారిశుధ్యం', cat: Category.NON_FINANCE, sla: 96, kw: ['drainage', 'drain', 'garbage', 'sanitation', 'sewage', 'డ్రైనేజీ', 'చెత్త', 'పారిశుధ్యం', 'మురుగు', 'dump'] },
+    { id: 'RB_ROAD', deptId: 'RB', nameEn: 'Road / bridge damage', nameTe: 'రహదారి / వంతెన నష్టం', cat: Category.NON_FINANCE, sla: 360, kw: ['road', 'pothole', 'potholes', 'bridge', 'culvert', 'highway', 'రహదారి', 'గుంత', 'గుంతలు', 'వంతెన', 'speed breaker'] },
+    { id: 'HEALTH_PHC', deptId: 'HEALTH', nameEn: 'PHC / hospital / medicines', nameTe: 'PHC / ఆసుపత్రి / మందులు', cat: Category.NON_FINANCE, sla: 72, kw: ['hospital', 'doctor', 'medicine', 'medicines', 'phc', 'ambulance', '108', 'ఆసుపత్రి', 'వైద్యం', 'మందులు', 'డాక్టర్', 'dengue', 'fever'] },
     { id: 'VIG_BRIBE', deptId: 'VIG', nameEn: 'Bribe / corruption complaint', nameTe: 'లంచం / అవినీతి ఫిర్యాదు', cat: Category.NON_FINANCE, sla: 168, kw: ['bribe', 'corruption', 'లంచం', 'demanded money', 'mamool', 'మామూలు'] },
   ];
   for (const s of subjects) {
@@ -106,6 +118,12 @@ async function main() {
     { username: 'ee.rws', name: 'D. Sudha', designation: 'Executive Engineer (Rural Water)', role: Roles.SUPERVISOR, deptId: 'RWS', level: 3, jurisdiction: jDistrict },
     { username: 'cs.officer2', name: 'R. Latha', designation: 'Deputy Tahsildar — Civil Supplies', role: Roles.OFFICER, deptId: 'CS', level: 3, jurisdiction: jDistrict },
     { username: 'vig.officer', name: 'A. Khan', designation: 'Vigilance & Enforcement Officer', role: Roles.OFFICER, deptId: 'VIG', level: 2, jurisdiction: jDistrict },
+    { username: 'pr.officer', name: 'S. Devi', designation: 'Panchayat Secretary (Grade-I)', role: Roles.OFFICER, deptId: 'PR', level: 1, jurisdiction: jKuppam },
+    { username: 'pr.officer2', name: 'K. Murthy', designation: 'Extension Officer (Panchayat Raj)', role: Roles.OFFICER, deptId: 'PR', level: 2, jurisdiction: jDistrict },
+    { username: 'rb.officer', name: 'J. Prakash', designation: 'Assistant Engineer (R&B)', role: Roles.OFFICER, deptId: 'RB', level: 1, jurisdiction: jDistrict },
+    { username: 'rb.officer2', name: 'T. Vani', designation: 'Deputy Executive Engineer (R&B)', role: Roles.OFFICER, deptId: 'RB', level: 2, jurisdiction: jDistrict },
+    { username: 'health.officer', name: 'Dr. P. Ramesh', designation: 'Medical Officer (PHC Kuppam)', role: Roles.OFFICER, deptId: 'HEALTH', level: 1, jurisdiction: jKuppam },
+    { username: 'cs.supervisor', name: 'V. Sarala', designation: 'District Supply Officer (DSO)', role: Roles.SUPERVISOR, deptId: 'CS', level: 3, jurisdiction: jDistrict },
     { username: 'mpdo', name: 'N. Sailaja', designation: 'Mandal Parishad Development Officer (MPDO)', role: Roles.SUPERVISOR, deptId: null, level: 2, jurisdiction: jKuppam },
     { username: 'supervisor', name: 'Mandal Grievance Cell', designation: 'Mandal Grievance Cell', role: Roles.SUPERVISOR, deptId: null, level: 2, jurisdiction: jKuppam },
     { username: 'joint.collector', name: 'Smt. Rao', designation: 'Joint Collector', role: Roles.COLLECTOR, deptId: null, level: 4, jurisdiction: jDistrict },
@@ -138,11 +156,13 @@ async function main() {
   }
   const supervisor: AuthUser = { sub: officersByUsername['supervisor'], kind: 'OFFICER', role: Roles.SUPERVISOR, deptId: null, level: 2 };
 
-  // Helper: file a grievance (operator-confirmed dept → straight to ASSIGNED).
+  // Helper: file a grievance. With deptId → operator-confirmed (straight to
+  // ASSIGNED); without → the Saarthi 2.0 AI pipeline decides (95% gate).
   async function file(input: {
     channel: string; mobile: string; name: string; description: string;
-    deptId: string; subjectId: string; category: string; mandal: string; secretariatCode?: string;
-    aadhaar?: string; vulnerabilityFlags?: string[];
+    deptId?: string; subjectId?: string; category?: string; mandal: string; secretariatCode?: string;
+    aadhaar?: string; vulnerabilityFlags?: string[]; village?: string;
+    geoLat?: number; geoLng?: number; geoAccuracy?: number;
   }) {
     const res = await grievances.create(
       {
@@ -155,6 +175,8 @@ async function main() {
         district: 'Chittoor',
         grievanceDistrict: 'Chittoor',
         mandal: input.mandal,
+        village: input.village,
+        grievanceVillage: input.village,
         applicantType: 'INDIVIDUAL',
         secretariatCode: input.secretariatCode ?? 'AP-KPM-021',
         deptId: input.deptId,
@@ -163,6 +185,9 @@ async function main() {
         consent: true,
         consentScope: [],
         vulnerabilityFlags: input.vulnerabilityFlags,
+        geoLat: input.geoLat,
+        geoLng: input.geoLng,
+        geoAccuracy: input.geoAccuracy,
       } as any,
       undefined,
     );
@@ -243,6 +268,54 @@ async function main() {
     await grievances.citizenConfirmClosure(g12, { satisfied: true, benefitReceived: true, rating: 4 });
   }
 
+  // ── Saarthi 2.0 scenario cases ────────────────────────────────────────────
+  // G13 — filed WITHOUT a department: the two-stage classifier clears the 95%
+  // gate and AUTO-ROUTES to Panchayat Raj (streetlights). routedBy = AI.
+  const g13 = await file({
+    channel: Channels.CITIZEN_APP, mobile: '9876500013', name: 'Lakshmi Devi',
+    description: 'Street lights are not working in our lane for ten days, very dark at night, unsafe for women and children',
+    mandal: PILOT_MANDAL, village: 'Kuppam', geoLat: 12.7496, geoLng: 78.3428, geoAccuracy: 12,
+  });
+
+  // G14 — too vague for the gate → PENDING_VERIFICATION with the AI's top-3
+  // waiting at the District Grievance Officer's verification desk.
+  const g14 = await file({
+    channel: Channels.CITIZEN_APP, mobile: '9876500014', name: 'Raju',
+    description: 'Please help, there is a big problem in my area, officers are not responding to us',
+    mandal: PILOT_MANDAL, village: 'Kuppam',
+  });
+
+  // G15 — resolved ration case whose citizen requests a REOPEN with a typed
+  // reason → QUICK_DESK_REVIEW with the AI's desk-review brief attached.
+  const g15 = await file({
+    channel: Channels.CITIZEN_APP, mobile: '9876500015', name: 'Fathima Bee',
+    description: 'Ration dealer is giving only half quantity of rice every month, weighing machine seems wrong రేషన్ తక్కువ ఇస్తున్నారు',
+    deptId: 'CS', subjectId: 'CS_RATION_STOPPED', category: Category.FINANCE, mandal: PILOT_MANDAL, village: 'Kuppam',
+  });
+  {
+    const a = await assignee(g15);
+    await grievances.accept(g15, a);
+    await grievances.recordAction(g15, { actionType: 'ACTION_TAKEN', noteEn: 'Dealer counselled; weighing machine recalibrated and sealed.', evidenceIds: ['ev-cs-15'] }, a);
+    await grievances.resolve(g15, { resolutionNote: 'Weighing machine recalibrated; full quantity being issued.', evidenceIds: ['ev-cs-15'] }, a);
+    await grievances.reopenRequest(g15, {
+      reason: 'Nothing changed. The dealer is still giving less rice this week also. The machine shows correct weight but the bag is underfilled.',
+      lang: 'en',
+    });
+  }
+
+  // G16 + G17 — the geo+semantic dedupe: two citizens report the same pothole
+  // ~80 m apart → ONE canonical department ticket, report count 2.
+  const g16 = await file({
+    channel: Channels.CITIZEN_APP, mobile: '9876500016', name: 'Srinu',
+    description: 'Main road near Kuppam bus stand is full of big potholes, two-wheelers are skidding and falling, very dangerous',
+    mandal: PILOT_MANDAL, village: 'Kuppam', geoLat: 12.7452, geoLng: 78.3401, geoAccuracy: 8,
+  });
+  const g17 = await file({
+    channel: Channels.WHATSAPP, mobile: '9876500017', name: 'Bhavani',
+    description: 'Big potholes on main road near Kuppam bus stand, two-wheelers skidding and falling, very dangerous',
+    mandal: PILOT_MANDAL, village: 'Kuppam', geoLat: 12.7458, geoLng: 78.3406, geoAccuracy: 10,
+  });
+
   // ── Backdate timestamps for realistic durations & SLA states ─────────────
   // Spread creation over the last ~12 days.
   await backdate(prisma, g1, { created: daysAgo(2) });
@@ -260,7 +333,10 @@ async function main() {
   await prisma.grievance.update({ where: { id: g8 }, data: { createdAt: daysAgo(4), registeredAt: daysAgo(4), slaDueAt: new Date(Date.now() + 12 * 60 * 60 * 1000), slaBreachPredicted: true } });
   await backdate(prisma, g11, { created: daysAgo(7), assigned: daysAgo(7), resolved: daysAgo(4) });
   await backdate(prisma, g12, { created: daysAgo(8), assigned: daysAgo(8), resolved: daysAgo(5), closed: daysAgo(4) });
+  await backdate(prisma, g13, { created: daysAgo(1) });
+  await backdate(prisma, g15, { created: daysAgo(6), assigned: daysAgo(6), resolved: daysAgo(3) });
 
+  const g17row = await prisma.grievance.findUnique({ where: { id: g17 }, select: { status: true, isDuplicateOf: true } });
   const counts = {
     departments: await prisma.department.count(),
     subjects: await prisma.subject.count(),
@@ -268,9 +344,12 @@ async function main() {
     citizens: await prisma.citizen.count(),
     grievances: await prisma.grievance.count(),
     ledgerEvents: await prisma.auditEvent.count(),
+    verificationTasks: await prisma.verificationTask.count(),
+    deskReviews: await prisma.reopen.count({ where: { reviewStatus: 'PENDING' } }),
+    dedupeMergedG17: g17row?.status === 'MERGED',
   };
   log.log(`Seed complete: ${JSON.stringify(counts)}`);
-  log.log(`Logins (password "${PASSWORD}"): da1, cs.officer, rws.officer, supervisor, collector, auditor`);
+  log.log(`Logins (password "${PASSWORD}"): da1, cs.officer, rws.officer, pr.officer, rb.officer, supervisor, collector, auditor`);
 
   await app.close();
 }

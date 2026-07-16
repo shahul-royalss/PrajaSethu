@@ -155,4 +155,71 @@ export class LedgerService {
       select: { seq: true, eventType: true, actorRole: true, ts: true, blockHash: true, ledgerTxId: true, payloadHash: true },
     });
   }
+
+  /**
+   * Block explorer feed — full block detail (hashes, links, payload) plus a
+   * per-page verification, so the UI can render a REAL chain: every block shows
+   * its prev-hash link and whether recomputing its hashes still matches.
+   */
+  async chain(opts: { grievanceId?: string; limit?: number; before?: number } = {}) {
+    const take = Math.min(Math.max(opts.limit ?? 40, 1), 200);
+    const where: any = {};
+    if (opts.grievanceId) where.grievanceId = opts.grievanceId;
+    if (opts.before != null) where.seq = { lt: opts.before };
+    const events = await this.prisma.auditEvent.findMany({
+      where,
+      orderBy: { seq: 'desc' },
+      take,
+    });
+    const grievanceIds = [...new Set(events.map((e) => e.grievanceId).filter(Boolean))] as string[];
+    const grievances = grievanceIds.length
+      ? await this.prisma.grievance.findMany({ where: { id: { in: grievanceIds } }, select: { id: true, ysr: true } })
+      : [];
+    const ysrById = new Map(grievances.map((g) => [g.id, g.ysr]));
+
+    const blocks = events.map((e) => {
+      const payloadHashOk = sha256(e.payload) === e.payloadHash;
+      const blockHashOk =
+        sha256(
+          canonicalJson({
+            seq: e.seq,
+            prevHash: e.prevHash,
+            grievanceId: e.grievanceId ?? null,
+            eventType: e.eventType,
+            actorRole: e.actorRole,
+            payloadHash: e.payloadHash,
+            ts: e.ts.toISOString(),
+          }),
+        ) === e.blockHash;
+      let payload: unknown = null;
+      try {
+        payload = JSON.parse(e.payload);
+      } catch {
+        payload = e.payload;
+      }
+      return {
+        seq: e.seq,
+        eventType: e.eventType,
+        actorRole: e.actorRole,
+        grievanceId: e.grievanceId,
+        ysr: e.grievanceId ? (ysrById.get(e.grievanceId) ?? null) : null,
+        payload,
+        payloadHash: e.payloadHash,
+        prevHash: e.prevHash,
+        blockHash: e.blockHash,
+        ledgerTxId: e.ledgerTxId,
+        ts: e.ts,
+        verified: payloadHashOk && blockHashOk,
+      };
+    });
+
+    const total = await this.prisma.auditEvent.count(opts.grievanceId ? { where: { grievanceId: opts.grievanceId } } : undefined);
+    const head = await this.prisma.auditEvent.findFirst({ orderBy: { seq: 'desc' }, select: { seq: true, blockHash: true, ts: true } });
+    return {
+      blocks, // newest first; each block links to the previous via prevHash
+      total,
+      head: head ? { seq: head.seq, blockHash: head.blockHash, ts: head.ts } : null,
+      genesisPrev: GENESIS_PREV,
+    };
+  }
 }

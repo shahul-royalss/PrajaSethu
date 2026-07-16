@@ -15,6 +15,23 @@ interface ServiceDef {
 }
 
 /**
+ * Public X-Road service catalogue metadata (no fact functions) — importable by
+ * the AI layer so it can SUGGEST which cross-department lookups fit a complaint
+ * without a DI cycle. Keep in sync with the private `services` map below.
+ */
+export const XROAD_SERVICE_META: { id: string; deptId: string; member: string; label: string; category: string }[] = [
+  { id: 'ration_status_by_token', deptId: 'CS', member: 'AP/GOV/CIVIL-SUPPLIES', label: 'Ration card status', category: 'Civil Supplies' },
+  { id: 'pension_status', deptId: 'PEN', member: 'AP/GOV/PENSIONS', label: 'Pension status', category: 'Pensions' },
+  { id: 'power_connection_status', deptId: 'ENERGY', member: 'AP/GOV/APSPDCL', label: 'Power connection status', category: 'Energy' },
+  { id: 'land_record_status', deptId: 'REVENUE', member: 'AP/GOV/REVENUE', label: 'Land record / mutation status', category: 'Revenue / Land' },
+  { id: 'water_scheme_status', deptId: 'RWS', member: 'AP/GOV/RWS', label: 'Rural water scheme status', category: 'Rural Water' },
+  { id: 'aadhaar_demographic', deptId: 'CS', member: 'INDIA/UIDAI/EKYC', label: 'Aadhaar eKYC (name/age/address match)', category: 'Identity (UIDAI)' },
+  { id: 'digilocker_documents', deptId: 'REVENUE', member: 'INDIA/MEITY/DIGILOCKER', label: 'DigiLocker issued documents', category: 'Documents (DigiLocker)' },
+  { id: 'cctns_complaint_status', deptId: 'VIG', member: 'AP/POLICE/CCTNS', label: 'CCTNS complaint / FIR status', category: 'Police (CCTNS)' },
+  { id: 'municipal_property_tax', deptId: 'REVENUE', member: 'AP/GOV/MUNICIPAL', label: 'Municipal property tax status', category: 'Municipal' },
+];
+
+/**
  * X-Road inter-department data exchange, pilot implementation (Blueprint D.1).
  * Real deployment runs Security Servers with mTLS + a central trust service. The
  * load-bearing PROPERTIES are reproduced here: every exchange is purpose-bound,
