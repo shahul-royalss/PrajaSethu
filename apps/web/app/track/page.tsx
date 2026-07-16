@@ -2,8 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import Link from 'next/link';
 import { useI18n } from '../lib/intl';
+import { Header } from '../components/Header';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 
 export default function TrackEntry() {
@@ -18,12 +18,7 @@ export default function TrackEntry() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-xl items-center justify-between px-4 py-3">
-          <Link href="/citizen" className="text-sm font-semibold text-slate-700">← {t('appName')}</Link>
-          <LanguageSwitcher compact />
-        </div>
-      </header>
+      <Header title={t('trackTitle')} backHref="/citizen" right={<LanguageSwitcher compact />} />
       <main className="mx-auto max-w-xl px-4 py-10">
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <h1 className="text-xl font-bold text-slate-900">{t('trackTitle')}</h1>

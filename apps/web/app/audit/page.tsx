@@ -114,7 +114,7 @@ function Audit({ token, officer }: { token: string; officer: Officer }) {
 export default function AuditPage() {
   return (
     <div className="min-h-screen">
-      <Header title="Audit" />
+      <Header title="Audit" backHref="/staff" />
       <LoginGate allowedRoles={['AUDITOR', 'COLLECTOR']} title="Audit sign-in">
         {({ token, officer }) => <Audit token={token} officer={officer} />}
       </LoginGate>

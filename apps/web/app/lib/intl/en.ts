@@ -24,6 +24,14 @@ export const en = {
   callHelpline: 'Call 1902 for help',
   readAloud: 'Read aloud',
   changeLanguage: 'Change language',
+
+  // app navigation (bottom bar + header controls)
+  navHome: 'Home',
+  navTrack: 'Track',
+  navNew: 'New complaint',
+  navHeatmap: 'Heatmap',
+  navAnalytics: 'Analytics',
+  navConsole: 'Console',
   noVoiceHint: 'This device has no voice for your language, so questions cannot be read aloud. Everything still works — please read the questions on screen.',
 
   // roles / doors
@@ -121,6 +129,10 @@ export const en = {
   closeYes: 'Yes, close it',
   reopenNo: 'No, reopen it',
   talkToAssistant: 'Talk to an assistant',
+  assistDept: 'Concerned department',
+  assistCallDept: 'Call department helpline',
+  assistGeneral: 'General grievance helpline',
+  assistVisit: 'Prefer in person? Staff at your Grama/Ward Sachivalayam can help you too.',
 
   // status names
   st_REGISTERED: 'Registered',

@@ -222,7 +222,7 @@ function Console({ token }: { token: string }) {
 export default function ConsolePage() {
   return (
     <div className="min-h-screen">
-      <Header title="Sachivalayam console" />
+      <Header title="Sachivalayam console" backHref="/staff" />
       <LoginGate allowedRoles={['DA', 'OFFICER', 'SUPERVISOR']} title="Sachivalayam operator sign-in">
         {({ token }) => <Console token={token} />}
       </LoginGate>

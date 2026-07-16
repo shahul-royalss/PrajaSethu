@@ -1,13 +1,24 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
+import { Suspense } from 'react';
 import './globals.css';
 import './console.css';
 import './auth.css';
 import { Providers } from './providers';
+import { BottomNav } from './components/AppNav';
 
 export const metadata: Metadata = {
   title: 'SAARTHI — Public Grievance Redressal · Government of India',
   description:
     'SAARTHI — a voice-first, multilingual, tamper-evident Public Grievance Redressal System. File and track grievances in your own language. Government of India pilot.',
+};
+
+// viewport-fit=cover lets the bottom app bar extend under notches / gesture bars
+// (padded back out with env(safe-area-inset-bottom)) when embedded in the app.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#0D2150',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -23,7 +34,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="min-h-screen font-sans antialiased">
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          <Suspense fallback={null}>
+            <BottomNav />
+          </Suspense>
+        </Providers>
       </body>
     </html>
   );

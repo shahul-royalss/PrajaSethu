@@ -14,9 +14,17 @@ export interface Officer {
 const TOKEN_KEY = 'praja_token';
 const OFFICER_KEY = 'praja_officer';
 
+// Fired on every session mutation so chrome that renders outside the page tree
+// (e.g. the bottom app-nav) can react to sign-in/out that doesn't navigate.
+export const SESSION_EVENT = 'saarthi:session';
+function announce() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(SESSION_EVENT));
+}
+
 export function saveSession(token: string, officer: Officer) {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(OFFICER_KEY, JSON.stringify(officer));
+  announce();
 }
 
 export function getToken(): string | null {
@@ -33,6 +41,7 @@ export function getOfficer(): Officer | null {
 export function clearSession() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(OFFICER_KEY);
+  announce();
 }
 
 // ── Citizen session (kept separate from officer) ─────────────────────────────
@@ -48,6 +57,7 @@ const C_USER_KEY = 'praja_citizen';
 export function saveCitizenSession(token: string, citizen: CitizenUser) {
   localStorage.setItem(C_TOKEN_KEY, token);
   localStorage.setItem(C_USER_KEY, JSON.stringify(citizen));
+  announce();
 }
 
 export function getCitizenToken(): string | null {
@@ -64,4 +74,5 @@ export function getCitizen(): CitizenUser | null {
 export function clearCitizenSession() {
   localStorage.removeItem(C_TOKEN_KEY);
   localStorage.removeItem(C_USER_KEY);
+  announce();
 }
