@@ -17,7 +17,7 @@ import { getCitizen, getCitizenToken } from '../../lib/session';
 import { useContinuousTranscript } from '../../lib/speech';
 import { blobToBase64, fmtClock, useVoiceRecorder } from '../../lib/recorder';
 import { ALL_LANGUAGES_STRIP, detectClientLanguage, ClientLangDetection } from '../../lib/langdetect';
-import { asrStatus, AsrTranscript, PcmSegmenter, TranscriptQueue } from '../../lib/asr';
+import { useAsrPipeline } from '../../lib/asr';
 
 interface Geography {
   districts: string[];
@@ -276,59 +276,40 @@ function VoiceCapture({
   onDone: (blob: Blob, mime: string, durationSec: number, transcript: string, det: ClientLangDetection | null) => void;
 }) {
   const { t } = useI18n();
-  const [serverAsr, setServerAsr] = useState<boolean | null>(null);
-  const serverAsrRef = useRef(false);
-  useEffect(() => {
-    let alive = true;
-    asrStatus().then((s) => {
-      if (!alive) return;
-      setServerAsr(s.asr);
-      serverAsrRef.current = s.asr;
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  // Server-ASR pipeline: segmenter → ordered transcription queue → native text.
-  const [asrText, setAsrText] = useState('');
-  const [asrDet, setAsrDet] = useState<AsrTranscript | null>(null);
-  const [inFlight, setInFlight] = useState(0);
-  const genRef = useRef(0);
-  const queueRef = useRef<TranscriptQueue | null>(null);
-  const segRef = useRef<PcmSegmenter | null>(null);
-  const buildAsrPipeline = useCallback(() => {
-    const gen = ++genRef.current; // stale-queue guard across redos
-    const queue = new TranscriptQueue(
-      (r) => {
-        if (genRef.current !== gen) return;
-        setAsrText((p) => (p ? p + ' ' : '') + r.transcript);
-        if (r.lang) setAsrDet(r);
-      },
-      (n) => {
-        if (genRef.current === gen) setInFlight(n);
-      },
-    );
-    queueRef.current = queue;
-    segRef.current = new PcmSegmenter((wav) => queue.push(wav));
-  }, []);
-  useEffect(() => {
-    buildAsrPipeline();
-  }, [buildAsrPipeline]);
-
-  const rec = useVoiceRecorder((samples, rate) => {
-    if (serverAsrRef.current) segRef.current?.feed(samples, rate);
-  });
 
   // Fallback pipeline: on-device recognition aimed at srLang.
   const [srLang, setSrLang] = useState(uiSpeech);
   const [pinned, setPinned] = useState(false); // citizen tapped a chip — stop auto re-aiming
   const st = useContinuousTranscript(srLang);
+  const stRef = useRef(st);
+  stRef.current = st;
   const [det, setDet] = useState<ClientLangDetection | null>(null);
   const finalDurationRef = useRef(0);
+  const recordingRef = useRef(false);
+
+  // Server-ASR pipeline (lib/asr.ts): PCM → WAV segments → ordered native-script
+  // transcription. If the service is unconfigured or failing, it degrades and
+  // on-device recognition takes over MID-RECORDING — no words lost, no dead UI.
+  const asr = useAsrPipeline((reason) => {
+    if (recordingRef.current) stRef.current.begin();
+    if (reason === 'errors') setDet(null);
+  });
+  const serverAsr = asr.serverAsr;
+  const asrText = asr.text;
+  const asrDet = asr.det;
+  const inFlight = asr.inFlight;
+
+  const rec = useVoiceRecorder(asr.feed);
+
+  // Probe on mount: warms a sleeping API and, when there is no server ASR,
+  // shows the "I will speak in …" chips BEFORE the citizen starts recording.
+  const ensureStatus = asr.ensureStatus;
+  useEffect(() => {
+    ensureStatus();
+  }, [ensureStatus]);
 
   const fallbackText = (st.finalText + ' ' + st.interim).trim();
-  const fullText = serverAsr ? asrText.trim() : fallbackText;
+  const fullText = serverAsr ? asrText.trim() : ((asrText ? asrText + ' ' : '') + fallbackText).trim();
 
   // Live, silent language detection (fallback mode only — in server-ASR mode
   // the language comes from the audio itself, not from transcript guessing).
@@ -353,26 +334,26 @@ function VoiceCapture({
     : det && { nameNative: det.nameNative, nameEn: det.nameEn, confidence: det.confidence };
 
   const begin = async () => {
-    const s = await asrStatus(); // cached after the first probe
-    serverAsrRef.current = s.asr;
-    setServerAsr(s.asr);
+    // The mic starts IMMEDIATELY — the status probe resolves in parallel and
+    // any segments cut in the meantime are buffered, so a sleepy server can
+    // never make the record button feel dead or lose the first sentence.
+    recordingRef.current = true;
+    asr.ensureStatus(); // resolves → false starts on-device recognition via onDegrade
     await rec.start();
-    if (!s.asr) st.begin();
   };
   const finish = () => {
+    recordingRef.current = false;
     st.end();
-    if (serverAsrRef.current) segRef.current?.flush(); // transcribe the tail
+    asr.flush(); // transcribe the tail
     rec.stop();
   };
 
   const resetAll = () => {
+    recordingRef.current = false;
     rec.reset();
     setDet(null);
     st.setFinalText('');
-    setAsrText('');
-    setAsrDet(null);
-    setInFlight(0);
-    buildAsrPipeline();
+    asr.reset();
   };
 
   // What travels with the complaint: Sarvam's language identification if we
@@ -444,6 +425,9 @@ function VoiceCapture({
           {/* recognition mode — true audio-level detection vs aimed on-device */}
           {serverAsr && (
             <p className="mt-2 text-[12px] font-medium text-brand">✦ {t('asrAutoHint')}</p>
+          )}
+          {asr.degraded && (
+            <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-800">{t('asrDegraded')}</p>
           )}
           {serverAsr === false && (
             <div className="mt-3">

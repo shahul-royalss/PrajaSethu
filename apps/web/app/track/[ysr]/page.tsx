@@ -20,7 +20,7 @@ import { useI18n } from '../../lib/intl';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { blobToBase64, fmtClock, useVoiceRecorder } from '../../lib/recorder';
 import { detectClientLanguage } from '../../lib/langdetect';
-import { asrStatus, AsrTranscript, PcmSegmenter, TranscriptQueue } from '../../lib/asr';
+import { useAsrPipeline } from '../../lib/asr';
 
 export default function TrackView() {
   const params = useParams<{ ysr: string }>();
@@ -329,47 +329,31 @@ function ReopenPanel({ grievance, onDone }: { grievance: PublicGrievance; onDone
   // Server ASR (when configured): the spoken reason is recognised from the
   // audio itself — the native-script transcript travels with the request, so
   // the desk-review officer READS it right next to the playable recording.
-  const serverAsrRef = useRef(false);
-  const [voiceText, setVoiceText] = useState('');
-  const [voiceDet, setVoiceDet] = useState<AsrTranscript | null>(null);
-  const [inFlight, setInFlight] = useState(0);
-  const genRef = useRef(0);
-  const segRef = useRef<PcmSegmenter | null>(null);
-  const buildAsrPipeline = useCallback(() => {
-    const gen = ++genRef.current; // stale-queue guard across re-records
-    const queue = new TranscriptQueue(
-      (r) => {
-        if (genRef.current !== gen) return;
-        setVoiceText((p) => (p ? p + ' ' : '') + r.transcript);
-        if (r.lang) setVoiceDet(r);
-      },
-      (n) => {
-        if (genRef.current === gen) setInFlight(n);
-      },
-    );
-    segRef.current = new PcmSegmenter((wav) => queue.push(wav));
-  }, []);
-  useEffect(() => {
-    buildAsrPipeline();
-  }, [buildAsrPipeline]);
+  // The shared pipeline buffers segments while the status probe resolves and
+  // degrades quietly on failures (the audio itself always travels, and the
+  // server re-attempts transcription on receipt).
+  const asrp = useAsrPipeline();
+  const voiceText = asrp.text;
+  const voiceDet = asrp.det;
+  const inFlight = asrp.inFlight;
 
-  const rec = useVoiceRecorder((samples, rate) => {
-    if (serverAsrRef.current) segRef.current?.feed(samples, rate);
-  });
+  const rec = useVoiceRecorder(asrp.feed);
+  // Probe early so a sleeping API is awake by the time the citizen speaks.
+  const ensureStatus = asrp.ensureStatus;
+  useEffect(() => {
+    ensureStatus();
+  }, [ensureStatus]);
   const beginVoice = async () => {
-    serverAsrRef.current = (await asrStatus()).asr;
+    asrp.ensureStatus(); // never delays the mic — segments buffer meanwhile
     await rec.start();
   };
   const stopVoice = () => {
-    if (serverAsrRef.current) segRef.current?.flush();
+    asrp.flush();
     rec.stop();
   };
   const redoVoice = () => {
     rec.reset();
-    setVoiceText('');
-    setVoiceDet(null);
-    setInFlight(0);
-    buildAsrPipeline();
+    asrp.reset();
   };
 
   const durationRef = useRef(0);

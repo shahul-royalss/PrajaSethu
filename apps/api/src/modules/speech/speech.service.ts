@@ -1,6 +1,6 @@
 import { Injectable, Logger, PayloadTooLargeException, ServiceUnavailableException } from '@nestjs/common';
 import { langName } from '../../common/lang';
-import { sarvamEnabled, sarvamSpeechToText } from './sarvam.client';
+import { sarvamEnabled, sarvamSpeechToText, sarvamTranslate } from './sarvam.client';
 
 export interface TranscriptResult {
   transcript: string;
@@ -25,13 +25,30 @@ const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 @Injectable()
 export class SpeechService {
   private readonly log = new Logger(SpeechService.name);
+  // /speech/status?probe=1 makes one real Sarvam call so an operator can check
+  // "is my key actually working in production?" from a browser. Cached briefly
+  // so the public endpoint cannot be used to burn API credits.
+  private probeCache: { at: number; live: 'ok' | 'failed'; detail?: string } | null = null;
 
-  status() {
+  async status(probe = false) {
     const enabled = sarvamEnabled();
-    return {
+    const base: { asr: boolean; provider: string | null; live?: string; detail?: string } = {
       asr: enabled,
       provider: enabled ? 'sarvam' : null,
     };
+    if (!probe || !enabled) return base;
+    const now = Date.now();
+    if (!this.probeCache || now - this.probeCache.at > 5 * 60_000) {
+      try {
+        const r = await sarvamTranslate('నీళ్లు రావడం లేదు', 'en');
+        this.probeCache = r.text
+          ? { at: now, live: 'ok' }
+          : { at: now, live: 'failed', detail: 'empty translation' };
+      } catch (e) {
+        this.probeCache = { at: now, live: 'failed', detail: (e as Error).message.slice(0, 200) };
+      }
+    }
+    return { ...base, live: this.probeCache.live, ...(this.probeCache.detail ? { detail: this.probeCache.detail } : {}) };
   }
 
   async transcribe(audioBase64: string, mime?: string, languageHint?: string): Promise<TranscriptResult> {
@@ -47,9 +64,16 @@ export class SpeechService {
     if (audio.length > MAX_AUDIO_BYTES) {
       throw new PayloadTooLargeException('Audio segment too large — send segments under 10 MB.');
     }
-    const { transcript, lang } = await sarvamSpeechToText(audio, mime, languageHint ?? null);
-    const names = langName(lang);
-    return { transcript, lang, nameEn: names.en, nameNative: names.native, provider: 'sarvam' };
+    let stt: { transcript: string; lang: string | null };
+    try {
+      stt = await sarvamSpeechToText(audio, mime, languageHint ?? null);
+    } catch (e) {
+      // Surface a clean 503 (not a 500 stack) so the client degrades gracefully.
+      this.log.warn(`Sarvam STT failed: ${(e as Error).message}`);
+      throw new ServiceUnavailableException(`Speech recognition upstream failed: ${(e as Error).message.slice(0, 200)}`);
+    }
+    const names = langName(stt.lang);
+    return { transcript: stt.transcript, lang: stt.lang, nameEn: names.en, nameNative: names.native, provider: 'sarvam' };
   }
 
   /**

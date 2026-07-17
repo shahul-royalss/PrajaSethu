@@ -222,6 +222,7 @@ export const en = {
   recReview: 'Listen to your recording',
   recKeepAudio: 'Your original voice recording travels with the complaint to the department — it is your evidence.',
   asrAutoHint: 'Speak in any language — we recognise it from your voice and write it in your own script.',
+  asrDegraded: 'Voice-to-text is unreachable right now — your recording still travels with the complaint, and the server will transcribe it.',
   speakLangPick: 'I will speak in',
   transcribing: 'converting your voice to text…',
   typeHere: 'Describe your problem in any language…',

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { IsOptional, IsString } from 'class-validator';
 import { Public } from '../../common/auth/public.decorator';
 import { SpeechService } from './speech.service';
@@ -25,8 +25,10 @@ export class SpeechController {
 
   @Public()
   @Get('status')
-  status() {
-    return this.speech.status();
+  status(@Query('probe') probe?: string) {
+    // ?probe=1 → one real (cached) Sarvam call, so "is my key working in
+    // production?" is answerable from a browser tab.
+    return this.speech.status(probe === '1' || probe === 'true');
   }
 
   @Public()
