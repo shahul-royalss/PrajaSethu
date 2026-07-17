@@ -20,6 +20,7 @@ import { useI18n } from '../../lib/intl';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { blobToBase64, fmtClock, useVoiceRecorder } from '../../lib/recorder';
 import { detectClientLanguage } from '../../lib/langdetect';
+import { asrStatus, AsrTranscript, PcmSegmenter, TranscriptQueue } from '../../lib/asr';
 
 export default function TrackView() {
   const params = useParams<{ ysr: string }>();
@@ -324,22 +325,71 @@ function ReopenPanel({ grievance, onDone }: { grievance: PublicGrievance; onDone
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const rec = useVoiceRecorder();
+
+  // Server ASR (when configured): the spoken reason is recognised from the
+  // audio itself — the native-script transcript travels with the request, so
+  // the desk-review officer READS it right next to the playable recording.
+  const serverAsrRef = useRef(false);
+  const [voiceText, setVoiceText] = useState('');
+  const [voiceDet, setVoiceDet] = useState<AsrTranscript | null>(null);
+  const [inFlight, setInFlight] = useState(0);
+  const genRef = useRef(0);
+  const segRef = useRef<PcmSegmenter | null>(null);
+  const buildAsrPipeline = useCallback(() => {
+    const gen = ++genRef.current; // stale-queue guard across re-records
+    const queue = new TranscriptQueue(
+      (r) => {
+        if (genRef.current !== gen) return;
+        setVoiceText((p) => (p ? p + ' ' : '') + r.transcript);
+        if (r.lang) setVoiceDet(r);
+      },
+      (n) => {
+        if (genRef.current === gen) setInFlight(n);
+      },
+    );
+    segRef.current = new PcmSegmenter((wav) => queue.push(wav));
+  }, []);
+  useEffect(() => {
+    buildAsrPipeline();
+  }, [buildAsrPipeline]);
+
+  const rec = useVoiceRecorder((samples, rate) => {
+    if (serverAsrRef.current) segRef.current?.feed(samples, rate);
+  });
+  const beginVoice = async () => {
+    serverAsrRef.current = (await asrStatus()).asr;
+    await rec.start();
+  };
+  const stopVoice = () => {
+    if (serverAsrRef.current) segRef.current?.flush();
+    rec.stop();
+  };
+  const redoVoice = () => {
+    rec.reset();
+    setVoiceText('');
+    setVoiceDet(null);
+    setInFlight(0);
+    buildAsrPipeline();
+  };
+
   const durationRef = useRef(0);
   useEffect(() => {
     if (rec.status === 'recording') durationRef.current = rec.elapsedSec;
   }, [rec.status, rec.elapsedSec]);
 
   const det = detectClientLanguage(reason);
-  const canSend = mode === 'type' ? reason.trim().length >= 6 : !!rec.blob;
+  // Voice mode waits for the transcription queue to drain, so the officer
+  // never receives a half-transcribed reason.
+  const canSend = mode === 'type' ? reason.trim().length >= 6 : !!rec.blob && inFlight === 0;
 
   async function send() {
     setBusy(true);
     setErr(null);
     try {
+      const voiceReason = voiceText.trim();
       const body: Record<string, unknown> = {
-        reason: reason.trim() || undefined,
-        lang: det?.lang,
+        reason: (mode === 'voice' ? voiceReason : reason.trim()) || undefined,
+        lang: mode === 'voice' ? voiceDet?.lang ?? detectClientLanguage(voiceReason)?.lang : det?.lang,
       };
       if (mode === 'voice' && rec.blob) {
         body.voiceBase64 = await blobToBase64(rec.blob);
@@ -386,7 +436,7 @@ function ReopenPanel({ grievance, onDone }: { grievance: PublicGrievance; onDone
           {rec.status !== 'stopped' ? (
             <>
               <button
-                onClick={() => (rec.status === 'recording' ? rec.stop() : rec.start())}
+                onClick={() => (rec.status === 'recording' ? stopVoice() : beginVoice())}
                 className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full text-white shadow-card transition active:scale-95 ${
                   rec.status === 'recording' ? 'animate-pulse bg-red-500' : 'bg-fuchsia-600'
                 }`}
@@ -402,8 +452,21 @@ function ReopenPanel({ grievance, onDone }: { grievance: PublicGrievance; onDone
           ) : (
             <>
               {rec.url && <audio controls src={rec.url} className="w-full" />}
-              <button onClick={rec.reset} className="mt-2 text-[12.5px] font-semibold text-slate-500 underline">↺ {t('recRedo')}</button>
+              <button onClick={redoVoice} className="mt-2 text-[12.5px] font-semibold text-slate-500 underline">↺ {t('recRedo')}</button>
             </>
+          )}
+          {/* native-script transcript of the spoken reason (server ASR) */}
+          {(voiceText || inFlight > 0) && (
+            <div className="mt-3 rounded-xl bg-slate-50 p-3 text-left">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                {t('liveTranscript')}
+                {voiceDet ? ` · ${voiceDet.nameNative}` : ''}
+              </div>
+              <p className="mt-1 text-[13px] leading-relaxed text-slate-700 font-telugu">
+                {voiceText}
+                {inFlight > 0 && <span className="ml-1.5 animate-pulse text-fuchsia-600">✦ {t('transcribing')}</span>}
+              </p>
+            </div>
           )}
           <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{t('recKeepAudio')}</p>
         </div>

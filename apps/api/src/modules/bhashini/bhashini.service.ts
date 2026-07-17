@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { sha256 } from '../../common/util';
+import { sarvamEnabled, sarvamTranslate } from '../speech/sarvam.client';
 
 /**
  * Bhashini language engine, pilot adapter (Blueprint D.3).
@@ -37,8 +38,20 @@ export class BhashiniService {
     return { transcript: this.cannedTranscripts[key], language, confidence: 0.9 };
   }
 
+  private readonly log = new Logger(BhashiniService.name);
+
   async nmt(text: string, from = 'te', to = 'en'): Promise<{ text: string; from: string; to: string }> {
     if (from === to) return { text, from, to };
+    // Live path: Sarvam Mayura translation with automatic source detection —
+    // ANY of the supported languages → English, not just the Telugu glossary.
+    if (to === 'en' && sarvamEnabled() && text.trim()) {
+      try {
+        const r = await sarvamTranslate(text, 'en');
+        if (r.text) return { text: r.text, from: r.sourceLang ?? from, to };
+      } catch (e) {
+        this.log.debug(`Sarvam translate unavailable, using offline gist: ${(e as Error).message}`);
+      }
+    }
     let out = text;
     if (from === 'te' && to === 'en') {
       for (const [te, en] of Object.entries(this.glossary)) {

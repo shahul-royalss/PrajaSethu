@@ -44,7 +44,13 @@ function pickMime(): string {
   return '';
 }
 
-export function useVoiceRecorder() {
+/**
+ * @param onPcm Optional raw-PCM tap fed from the same Web-Audio graph as the
+ * waveform. Used by server-side ASR (lib/asr.ts) to build WAV segments while
+ * the evidence recording (compact webm/opus) continues untouched. Never fires
+ * while paused.
+ */
+export function useVoiceRecorder(onPcm?: (samples: Float32Array, sampleRate: number) => void) {
   const [status, setStatus] = useState<RecorderStatus>('idle');
   const [elapsedSec, setElapsedSec] = useState(0);
   const [levels, setLevels] = useState<number[]>(Array(WAVE_BARS).fill(0.05));
@@ -59,6 +65,9 @@ export function useVoiceRecorder() {
   const mimeRef = useRef<string>('audio/webm');
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const procRef = useRef<ScriptProcessorNode | null>(null);
+  const onPcmRef = useRef(onPcm);
+  onPcmRef.current = onPcm;
   const rafRef = useRef<number>(0);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startedAtRef = useRef(0);
@@ -72,6 +81,12 @@ export function useVoiceRecorder() {
     tickRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    try {
+      procRef.current?.disconnect();
+    } catch {
+      /* already gone */
+    }
+    procRef.current = null;
     audioCtxRef.current?.close().catch(() => undefined);
     audioCtxRef.current = null;
     analyserRef.current = null;
@@ -180,6 +195,21 @@ export function useVoiceRecorder() {
       src.connect(analyser);
       audioCtxRef.current = ctx;
       analyserRef.current = analyser;
+      // Raw-PCM tap for server-side ASR. ScriptProcessor must be connected to
+      // the destination to fire; it outputs silence (we never write to the
+      // output buffer), so nothing is audible.
+      if (onPcmRef.current) {
+        const proc = ctx.createScriptProcessor(4096, 1, 1);
+        proc.onaudioprocess = (ev) => {
+          if (!onPcmRef.current) return;
+          if (mediaRef.current?.state !== 'recording') return; // skip pauses
+          const ch = ev.inputBuffer.getChannelData(0);
+          onPcmRef.current(new Float32Array(ch), ev.inputBuffer.sampleRate);
+        };
+        src.connect(proc);
+        proc.connect(ctx.destination);
+        procRef.current = proc;
+      }
       drawLoop();
     } catch {
       /* waveform is progressive enhancement */

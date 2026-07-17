@@ -17,6 +17,7 @@ import { getCitizen, getCitizenToken } from '../../lib/session';
 import { useContinuousTranscript } from '../../lib/speech';
 import { blobToBase64, fmtClock, useVoiceRecorder } from '../../lib/recorder';
 import { ALL_LANGUAGES_STRIP, detectClientLanguage, ClientLangDetection } from '../../lib/langdetect';
+import { asrStatus, AsrTranscript, PcmSegmenter, TranscriptQueue } from '../../lib/asr';
 
 interface Geography {
   districts: string[];
@@ -240,7 +241,31 @@ function MethodChoice({ onVoice, onType }: { onVoice: () => void; onType: () => 
   );
 }
 
+// Fallback-mode recogniser targets (browser SpeechRecognition can't hear the
+// language — the citizen aims it with one tap). Hidden when server ASR is on.
+const FALLBACK_LANGS = [
+  { code: 'te', native: 'తెలుగు', speech: 'te-IN' },
+  { code: 'hi', native: 'हिन्दी', speech: 'hi-IN' },
+  { code: 'en', native: 'English', speech: 'en-IN' },
+  { code: 'ta', native: 'தமிழ்', speech: 'ta-IN' },
+  { code: 'kn', native: 'ಕನ್ನಡ', speech: 'kn-IN' },
+  { code: 'ml', native: 'മലയാളം', speech: 'ml-IN' },
+  { code: 'bn', native: 'বাংলা', speech: 'bn-IN' },
+  { code: 'mr', native: 'मराठी', speech: 'mr-IN' },
+  { code: 'gu', native: 'ગુજરાતી', speech: 'gu-IN' },
+  { code: 'pa', native: 'ਪੰਜਾਬੀ', speech: 'pa-IN' },
+  { code: 'ur', native: 'اُردُو', speech: 'ur-IN' },
+];
+
 // ── Phase 2a · continuous voice capture (§4.1 recording contract) ───────────
+// Two recognition paths share one recording:
+//  · SERVER ASR (Sarvam key configured): raw PCM from the recorder tap is cut
+//    into WAV segments at natural pauses; the server identifies the SPOKEN
+//    language from the audio and returns native-script text. True "speak any
+//    language" — the phone's UI language is irrelevant.
+//  · FALLBACK (no key): browser SpeechRecognition, which only transcribes the
+//    language it is aimed at — so the citizen gets one-tap language chips
+//    instead of silent wrong-language guesses.
 function VoiceCapture({
   uiSpeech,
   onBack,
@@ -251,36 +276,123 @@ function VoiceCapture({
   onDone: (blob: Blob, mime: string, durationSec: number, transcript: string, det: ClientLangDetection | null) => void;
 }) {
   const { t } = useI18n();
-  const rec = useVoiceRecorder();
+  const [serverAsr, setServerAsr] = useState<boolean | null>(null);
+  const serverAsrRef = useRef(false);
+  useEffect(() => {
+    let alive = true;
+    asrStatus().then((s) => {
+      if (!alive) return;
+      setServerAsr(s.asr);
+      serverAsrRef.current = s.asr;
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Server-ASR pipeline: segmenter → ordered transcription queue → native text.
+  const [asrText, setAsrText] = useState('');
+  const [asrDet, setAsrDet] = useState<AsrTranscript | null>(null);
+  const [inFlight, setInFlight] = useState(0);
+  const genRef = useRef(0);
+  const queueRef = useRef<TranscriptQueue | null>(null);
+  const segRef = useRef<PcmSegmenter | null>(null);
+  const buildAsrPipeline = useCallback(() => {
+    const gen = ++genRef.current; // stale-queue guard across redos
+    const queue = new TranscriptQueue(
+      (r) => {
+        if (genRef.current !== gen) return;
+        setAsrText((p) => (p ? p + ' ' : '') + r.transcript);
+        if (r.lang) setAsrDet(r);
+      },
+      (n) => {
+        if (genRef.current === gen) setInFlight(n);
+      },
+    );
+    queueRef.current = queue;
+    segRef.current = new PcmSegmenter((wav) => queue.push(wav));
+  }, []);
+  useEffect(() => {
+    buildAsrPipeline();
+  }, [buildAsrPipeline]);
+
+  const rec = useVoiceRecorder((samples, rate) => {
+    if (serverAsrRef.current) segRef.current?.feed(samples, rate);
+  });
+
+  // Fallback pipeline: on-device recognition aimed at srLang.
   const [srLang, setSrLang] = useState(uiSpeech);
+  const [pinned, setPinned] = useState(false); // citizen tapped a chip — stop auto re-aiming
   const st = useContinuousTranscript(srLang);
   const [det, setDet] = useState<ClientLangDetection | null>(null);
   const finalDurationRef = useRef(0);
 
-  const fullText = (st.finalText + ' ' + st.interim).trim();
+  const fallbackText = (st.finalText + ' ' + st.interim).trim();
+  const fullText = serverAsr ? asrText.trim() : fallbackText;
 
-  // Live, silent language detection — the badge updates, the recording never pauses.
+  // Live, silent language detection (fallback mode only — in server-ASR mode
+  // the language comes from the audio itself, not from transcript guessing).
   useEffect(() => {
-    const d = detectClientLanguage(fullText);
+    if (serverAsr) return;
+    const d = detectClientLanguage(fallbackText);
     if (d && d.confidence >= 0.6) {
       setDet(d);
       // Re-aim the recogniser at the detected language; it applies on its next
       // silent auto-restart (never interrupts the citizen or the recording).
-      if (d.speech !== srLang && d.confidence >= 0.75) setSrLang(d.speech);
+      if (!pinned && d.speech !== srLang && d.confidence >= 0.75) setSrLang(d.speech);
     }
-  }, [fullText, srLang]);
+  }, [fallbackText, srLang, serverAsr, pinned]);
 
   useEffect(() => {
     if (rec.status === 'recording') finalDurationRef.current = rec.elapsedSec;
   }, [rec.status, rec.elapsedSec]);
 
+  // The language badge — Sarvam's audio-level identification wins when present.
+  const badge = serverAsr
+    ? asrDet && { nameNative: asrDet.nameNative, nameEn: asrDet.nameEn, confidence: 0.97 }
+    : det && { nameNative: det.nameNative, nameEn: det.nameEn, confidence: det.confidence };
+
   const begin = async () => {
+    const s = await asrStatus(); // cached after the first probe
+    serverAsrRef.current = s.asr;
+    setServerAsr(s.asr);
     await rec.start();
-    st.begin();
+    if (!s.asr) st.begin();
   };
   const finish = () => {
     st.end();
+    if (serverAsrRef.current) segRef.current?.flush(); // transcribe the tail
     rec.stop();
+  };
+
+  const resetAll = () => {
+    rec.reset();
+    setDet(null);
+    st.setFinalText('');
+    setAsrText('');
+    setAsrDet(null);
+    setInFlight(0);
+    buildAsrPipeline();
+  };
+
+  // What travels with the complaint: Sarvam's language identification if we
+  // have it, else script analysis of whatever transcript exists.
+  const doneDet = (): ClientLangDetection | null => {
+    if (serverAsr) {
+      if (asrDet?.lang) {
+        return {
+          lang: asrDet.lang,
+          script: 'native',
+          nameEn: asrDet.nameEn,
+          nameNative: asrDet.nameNative,
+          confidence: 0.97,
+          codeSwitched: false,
+          speech: `${asrDet.lang}-IN`,
+        };
+      }
+      return detectClientLanguage(asrText);
+    }
+    return det;
   };
 
   const recording = rec.status === 'recording' || rec.status === 'paused';
@@ -289,10 +401,10 @@ function VoiceCapture({
     <div className="animate-fade-up">
       <div className="flex items-center justify-between">
         <button onClick={() => { st.end(); rec.reset(); onBack(); }} className="text-sm font-semibold text-slate-500">← {t('back')}</button>
-        {det && (
+        {badge && (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-india/25 bg-india/5 px-3 py-1 text-[12px] font-semibold text-india animate-fade-up">
             <span className="h-1.5 w-1.5 rounded-full bg-india" aria-hidden />
-            {t('recDetected')}: {det.nameNative} {det.nameEn} · {Math.round(det.confidence * 100)}%
+            {t('recDetected')}: {badge.nameNative} {badge.nameEn} · {Math.round(badge.confidence * 100)}%
           </span>
         )}
       </div>
@@ -329,6 +441,33 @@ function VoiceCapture({
             {rec.status === 'error' && t('micError')}
           </p>
 
+          {/* recognition mode — true audio-level detection vs aimed on-device */}
+          {serverAsr && (
+            <p className="mt-2 text-[12px] font-medium text-brand">✦ {t('asrAutoHint')}</p>
+          )}
+          {serverAsr === false && (
+            <div className="mt-3">
+              <p className="text-[11.5px] font-semibold uppercase tracking-wide text-slate-400">{t('speakLangPick')}</p>
+              <div className="-mx-2 mt-1.5 flex gap-1.5 overflow-x-auto px-2 pb-1" role="listbox" aria-label={t('speakLangPick')}>
+                {FALLBACK_LANGS.map((l) => (
+                  <button
+                    key={l.code}
+                    role="option"
+                    aria-selected={srLang === l.speech}
+                    onClick={() => { setSrLang(l.speech); setPinned(true); }}
+                    className={`shrink-0 rounded-full border px-3 py-1.5 text-[12.5px] font-semibold transition ${
+                      srLang === l.speech
+                        ? 'border-brand bg-brand text-white'
+                        : 'border-slate-200 bg-white text-slate-600'
+                    }`}
+                  >
+                    {l.native}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* live waveform — always visible while recording (§4.1) */}
           <div className="mx-auto mt-4 flex h-14 items-end justify-center gap-[3px]" aria-hidden>
             {rec.levels.map((v, i) => (
@@ -358,11 +497,14 @@ function VoiceCapture({
             <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-[12.5px] font-bold text-red-700">{t('recCountdown', { n: rec.remainingSec })}</p>
           )}
 
-          {/* live transcript (what the working text will be) */}
-          {fullText && (
+          {/* live transcript (what the working text will be) — native script */}
+          {(fullText || inFlight > 0) && (
             <div className="mt-4 rounded-2xl bg-slate-50 p-3 text-left">
               <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{t('liveTranscript')}</div>
-              <p className="mt-1 max-h-24 overflow-y-auto text-[13.5px] leading-relaxed text-slate-700">{fullText}</p>
+              <p className="mt-1 max-h-24 overflow-y-auto text-[13.5px] leading-relaxed text-slate-700 font-telugu">
+                {fullText}
+                {inFlight > 0 && <span className="ml-1.5 animate-pulse text-brand">✦ {t('transcribing')}</span>}
+              </p>
             </div>
           )}
         </div>
@@ -372,24 +514,28 @@ function VoiceCapture({
           {rec.url && <audio controls src={rec.url} className="mt-3 w-full" preload="metadata" />}
           <div className="mt-2 flex items-center justify-between text-[12.5px] text-slate-500">
             <span>{fmtClock(finalDurationRef.current || rec.elapsedSec)}</span>
-            {det && <span>{det.nameNative} · {Math.round(det.confidence * 100)}%</span>}
+            {badge && <span>{badge.nameNative} · {Math.round(badge.confidence * 100)}%</span>}
           </div>
-          {st.finalText && (
+          {(fullText || inFlight > 0) && (
             <div className="mt-3 rounded-2xl bg-slate-50 p-3">
               <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{t('liveTranscript')}</div>
-              <p className="mt-1 text-[13.5px] leading-relaxed text-slate-700">{st.finalText}</p>
+              <p className="mt-1 text-[13.5px] leading-relaxed text-slate-700 font-telugu">
+                {fullText}
+                {inFlight > 0 && <span className="ml-1.5 animate-pulse text-brand">✦ {t('transcribing')}</span>}
+              </p>
             </div>
           )}
           <p className="mt-3 text-[12px] leading-relaxed text-slate-400">🔒 {t('recKeepAudio')}</p>
           <div className="mt-5 flex gap-2.5">
-            <button onClick={() => { rec.reset(); setDet(null); st.setFinalText(''); }} className="flex-1 rounded-xl border border-slate-300 py-3 text-sm font-semibold text-slate-600">
+            <button onClick={resetAll} className="flex-1 rounded-xl border border-slate-300 py-3 text-sm font-semibold text-slate-600">
               ↺ {t('recRedo')}
             </button>
             <button
-              onClick={() => rec.blob && onDone(rec.blob, rec.mime, finalDurationRef.current || rec.elapsedSec, st.finalText.trim(), det)}
-              className="flex-[1.4] rounded-xl bg-brand py-3 text-sm font-bold text-white shadow-card"
+              disabled={inFlight > 0}
+              onClick={() => rec.blob && onDone(rec.blob, rec.mime, finalDurationRef.current || rec.elapsedSec, fullText, doneDet())}
+              className="flex-[1.4] rounded-xl bg-brand py-3 text-sm font-bold text-white shadow-card disabled:opacity-50"
             >
-              {t('recUseIt')} →
+              {inFlight > 0 ? `✦ ${t('transcribing')}` : `${t('recUseIt')} →`}
             </button>
           </div>
         </div>

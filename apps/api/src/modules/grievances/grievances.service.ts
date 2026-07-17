@@ -16,6 +16,7 @@ import { NotificationService } from '../notification/notification.service';
 import { LlmService, CitizenProfile } from '../llm/llm.service';
 import { DataExchangeService } from '../dataexchange/dataexchange.service';
 import { AttachmentsService } from '../attachments/attachments.service';
+import { SpeechService } from '../speech/speech.service';
 import { AuthUser } from '../../common/auth/current-user.decorator';
 import { canTransition, InvalidTransitionError } from '../../common/state-machine';
 import {
@@ -64,6 +65,7 @@ export class GrievancesService {
     private readonly llm: LlmService,
     private readonly dataExchange: DataExchangeService,
     private readonly attachments: AttachmentsService,
+    private readonly speech: SpeechService,
   ) {}
 
   // ── Intake — Saarthi 2.0 canonical pipeline (§2) ───────────────────────────
@@ -80,6 +82,18 @@ export class GrievancesService {
       description = asr.transcript;
       voiceTranscript = asr.transcript;
     }
+    // Device sent audio without a transcript (no client ASR available) — try
+    // server-side Sarvam recognition: spoken language detected from the audio,
+    // transcript in the native script. Best-effort; failure = evidence-only.
+    let serverAsrLang: string | null = null;
+    if (!description && dto.voiceBase64) {
+      const asr = await this.speech.tryTranscribeBase64(dto.voiceBase64, dto.voiceMime);
+      if (asr?.transcript) {
+        description = asr.transcript;
+        voiceTranscript = asr.transcript;
+        serverAsrLang = asr.lang;
+      }
+    }
     const voiceOnly = !description && !!dto.voiceBase64;
     if (voiceOnly) {
       // No transcript available on this device — the audio itself is evidence;
@@ -93,20 +107,25 @@ export class GrievancesService {
     // 2) Automatic language detection — server-side script analysis fused with
     //    the client's live detection. The citizen never picks a language.
     const serverDet = detectLanguage(voiceOnly ? '' : description);
-    const detectedLang = dto.detectedLang || (voiceOnly ? dto.language ?? 'te' : serverDet.lang);
-    const langConfidence = dto.detectedLang ? Math.max(dto.langConfidence ?? 0.8, 0.5) : serverDet.confidence;
+    // Sarvam's audio-level identification outranks everything: it heard the
+    // language, rather than inferring it from a transcript.
+    const detectedLang = serverAsrLang || dto.detectedLang || (voiceOnly ? dto.language ?? 'te' : serverDet.lang);
+    const langConfidence = serverAsrLang ? 0.97 : dto.detectedLang ? Math.max(dto.langConfidence ?? 0.8, 0.5) : serverDet.confidence;
     const codeSwitched = dto.codeSwitched ?? serverDet.codeSwitched;
     const language = detectedLang || dto.language || 'te';
 
-    // 3) Working-language translation (Bhashini NMT; mock in the pilot).
+    // 3) Working-language translation — ANY detected language → English (live
+    //    Sarvam Mayura when configured; offline Telugu glossary gist otherwise).
     const descriptionEn =
-      language === 'te' ? (await this.bhashini.nmt(description, 'te', 'en')).text : description;
+      language !== 'en' && !voiceOnly
+        ? (await this.bhashini.nmt(description, language, 'en')).text
+        : description;
 
     // 4) LLM complaint understanding — one structured extraction call (§7.1).
     const extraction = await this.llm.extractComplaint({ text: description, languageHint: language });
 
     // 5) Resolve / create the petitioner (Aadhaar tokenised, never raw).
-    let citizen = null as Awaited<ReturnType<typeof this.identity.resolveCitizen>> | null;
+    let citizen = null as Awaited<ReturnType<IdentityService['resolveCitizen']>> | null;
     if (actor?.kind === 'CITIZEN' && actor.sub) {
       citizen = await this.identity.attachToCitizen(actor.sub, {
         aadhaar: dto.aadhaar,
@@ -875,7 +894,7 @@ export class GrievancesService {
     if (![Status.RESOLVED, Status.CLOSED].includes(g.status as any)) {
       throw new BadRequestException('Only a RESOLVED or CLOSED grievance can be reopened.');
     }
-    const reasonText = (dto.reason ?? '').trim();
+    let reasonText = (dto.reason ?? '').trim();
     if (!reasonText && !dto.voiceBase64) {
       throw new BadRequestException('Please tell us WHY you are reopening — type the reason or record it by voice.');
     }
@@ -902,8 +921,28 @@ export class GrievancesService {
       });
     }
 
+    // Voice-only reason: recognise it server-side (Sarvam identifies the spoken
+    // language from the audio) so the desk-review officer reads the native-script
+    // transcript alongside the playable recording. Client ASR normally supplies
+    // the transcript already; this covers devices without it. Best-effort.
+    let asrReasonLang: string | null = null;
+    if (!reasonText && dto.voiceBase64) {
+      const asr = await this.speech.tryTranscribeBase64(dto.voiceBase64, dto.voiceMime);
+      if (asr?.transcript) {
+        reasonText = asr.transcript;
+        asrReasonLang = asr.lang;
+      }
+    }
+
     const det = reasonText ? detectLanguage(reasonText) : null;
-    const reasonLang = dto.lang ?? det?.lang ?? g.detectedLang ?? g.language;
+    const reasonLang = asrReasonLang ?? dto.lang ?? det?.lang ?? g.detectedLang ?? g.language;
+
+    // English working copy of the reason for the reviewing officer and the AI.
+    const reasonEn = reasonText
+      ? reasonLang && reasonLang !== 'en'
+        ? (await this.bhashini.nmt(reasonText, reasonLang, 'en')).text
+        : reasonText
+      : '(voice reason attached)';
 
     // AI quick-desk-review analysis: WHY is the citizen reopening, against the
     // resolution record and their background profile.
@@ -912,7 +951,11 @@ export class GrievancesService {
     const aiReview = await this.llm.analyzeReopen({
       complaintEn: g.descriptionEn || g.description,
       resolutionNotes: workLogs.filter((w) => w.noteEn).map((w) => w.noteEn!),
-      reopenReason: reasonText || '(voice reason attached — listen to the recording)',
+      reopenReason: reasonText
+        ? reasonEn !== reasonText
+          ? `${reasonText}\n(English: ${reasonEn})`
+          : reasonText
+        : '(voice reason attached — listen to the recording)',
       reasonLang,
       profile,
     });
@@ -932,8 +975,9 @@ export class GrievancesService {
     await this.prisma.reopen.create({
       data: {
         grievanceId: g.id,
-        reasonTe: det?.lang === 'te' ? reasonText : null,
-        reasonEn: reasonText || '(voice reason attached)',
+        reasonTe: reasonLang === 'te' ? reasonText : null,
+        reasonEn,
+        reasonNative: reasonText || null,
         escalatedLevel: Math.min(g.currentLevel + 1, 4),
         channel: dto.voiceBase64 ? 'VOICE' : 'TEXT',
         reasonLang,
@@ -1006,6 +1050,7 @@ export class GrievancesService {
           id: pending.id,
           reason: pending.reasonEn,
           reasonTe: pending.reasonTe,
+          reasonNative: (pending as any).reasonNative ?? pending.reasonTe,
           channel: pending.channel,
           reasonLang: pending.reasonLang,
           reasonLangName: langName(pending.reasonLang),
@@ -1320,7 +1365,7 @@ export class GrievancesService {
       deskReview: latestReopen
         ? {
             status: latestReopen.reviewStatus,
-            reason: latestReopen.reasonEn,
+            reason: (latestReopen as any).reasonNative ?? latestReopen.reasonEn,
             channel: latestReopen.channel,
             requestedAt: latestReopen.reopenedAt,
             reviewedByName: latestReopen.reviewedByName,
@@ -1655,6 +1700,7 @@ export class GrievancesService {
         id: r.id,
         reasonEn: r.reasonEn,
         reasonTe: r.reasonTe,
+        reasonNative: r.reasonNative ?? r.reasonTe,
         channel: r.channel,
         reasonLang: r.reasonLang,
         reasonAudioId: r.reasonAudioId,

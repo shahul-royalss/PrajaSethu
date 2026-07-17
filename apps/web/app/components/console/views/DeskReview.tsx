@@ -42,6 +42,7 @@ interface DeskItem {
     id: string;
     reason: string | null;
     reasonTe: string | null;
+    reasonNative: string | null;
     channel: string;
     reasonLang: string | null;
     reasonLangName: { en: string; native: string };
@@ -180,7 +181,13 @@ export function DeskReviewView({ token }: { token: string }) {
                         {bi('Citizen’s reopen reason', 'పౌరుడి రీఓపెన్ కారణం')} · {g.reopen.channel === 'VOICE' ? '🎙 ' + bi('voice', 'వాయిస్') : '⌨ ' + bi('typed', 'టైప్')}
                         {g.reopen.reasonLang ? ` · ${g.reopen.reasonLangName.native} (${g.reopen.reasonLangName.en})` : ''}
                       </div>
-                      {g.reopen.reason && <div style={{ fontSize: 13.5, lineHeight: 1.55 }} className="font-telugu">“{g.reopen.reason}”</div>}
+                      {/* native-script original first; English working copy under it */}
+                      {(g.reopen.reasonNative || g.reopen.reason) && (
+                        <div style={{ fontSize: 13.5, lineHeight: 1.55 }} className="font-telugu">“{g.reopen.reasonNative ?? g.reopen.reason}”</div>
+                      )}
+                      {g.reopen.reasonNative && g.reopen.reason && g.reopen.reason !== g.reopen.reasonNative && (
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>EN: {g.reopen.reason}</div>
+                      )}
                       {g.reopen.reasonAudioId && (
                         <audio
                           controls

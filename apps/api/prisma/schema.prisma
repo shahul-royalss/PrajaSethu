@@ -255,6 +255,7 @@ model Reopen {
   grievanceId    String
   reasonTe       String?
   reasonEn       String?
+  reasonNative   String? // the reason exactly as the citizen stated it, in their own script
   reopenedAt     DateTime @default(now())
   escalatedLevel Int
 

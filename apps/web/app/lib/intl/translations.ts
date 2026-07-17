@@ -10,6 +10,9 @@ export type Dict = Partial<typeof en>;
 // Merged ON TOP of translations.gen.ts so regenerating that file never wipes them.
 const extras: Record<string, Dict> = {
   hi: {
+    asrAutoHint: 'किसी भी भाषा में बोलिए — हम आपकी आवाज़ से भाषा पहचानकर आपकी ही लिपि में लिखते हैं।',
+    speakLangPick: 'मैं इस भाषा में बोलूँगा/बोलूँगी',
+    transcribing: 'आपकी आवाज़ को शब्दों में बदला जा रहा है…',
     noVoiceHint: 'इस डिवाइस पर आपकी भाषा की आवाज़ उपलब्ध नहीं है, इसलिए प्रश्न बोलकर नहीं सुनाए जा सकते। सब कुछ काम करता है — कृपया स्क्रीन पर प्रश्न पढ़ें।',
     navHome: 'होम', navTrack: 'ट्रैक', navNew: 'नई शिकायत', navHeatmap: 'हीटमैप', navAnalytics: 'विश्लेषण', navConsole: 'कंसोल',
     assistDept: 'संबंधित विभाग', assistCallDept: 'विभाग हेल्पलाइन पर कॉल करें', assistGeneral: 'सामान्य शिकायत हेल्पलाइन', assistVisit: 'आमने-सामने मदद चाहिए? आपके ग्राम/वार्ड सचिवालय के कर्मचारी भी आपकी मदद कर सकते हैं।',
@@ -35,6 +38,9 @@ const extras: Record<string, Dict> = {
     recDetected: 'గుర్తించింది',
     recReview: 'మీ రికార్డింగ్ వినండి',
     recKeepAudio: 'మీ అసలు వాయిస్ రికార్డింగ్ ఫిర్యాదుతో పాటు శాఖకు వెళ్తుంది — అది మీ సాక్ష్యం.',
+    asrAutoHint: 'ఏ భాషలోనైనా మాట్లాడండి — మీ గొంతు నుండే భాషను గుర్తించి మీ లిపిలోనే రాస్తాం.',
+    speakLangPick: 'నేను మాట్లాడే భాష',
+    transcribing: 'మీ మాటలను అక్షరాలుగా మారుస్తున్నాం…',
     typeHere: 'మీ సమస్యను ఏ భాషలోనైనా రాయండి…',
     liveTranscript: 'మేము విన్నది',
     yourLocation: 'మీ ప్రస్తుత లొకేషన్',
