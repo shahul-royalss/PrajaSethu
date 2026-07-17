@@ -21,13 +21,16 @@ import { SlaModule } from './modules/sla/sla.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { GrievancesModule } from './modules/grievances/grievances.module';
 import { AttachmentsModule } from './modules/attachments/attachments.module';
+import { SpeechModule } from './modules/speech/speech.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { ReferenceModule } from './modules/reference/reference.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    // .env.local (gitignored) overrides .env (committed defaults) — API keys
+    // and other real secrets belong ONLY in .env.local or the host's env vars.
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env.local', '.env'] }),
     JwtModule.register({
       global: true,
       secret: process.env.JWT_SECRET ?? 'praja-setu-pilot-dev-secret-change-me',
@@ -46,6 +49,7 @@ import { ReferenceModule } from './modules/reference/reference.module';
     NotificationModule,
     GrievancesModule,
     AttachmentsModule,
+    SpeechModule,
     DashboardModule,
     AuditModule,
     ReferenceModule,

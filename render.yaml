@@ -52,6 +52,12 @@ services:
         sync: false
       - key: ANTHROPIC_MODEL
         value: "claude-haiku-4-5-20251001"
+      # Sarvam AI speech-to-text (https://dashboard.sarvam.ai): detects the
+      # SPOKEN language from the audio and returns the transcript in the native
+      # script. Paste your key (sk_…) in the Render dashboard — without it the
+      # app falls back to on-device browser speech recognition.
+      - key: SARVAM_API_KEY
+        sync: false
 
   - type: web
     name: praja-setu-web

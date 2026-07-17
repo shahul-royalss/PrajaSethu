@@ -12,9 +12,11 @@ import { NotificationModule } from '../notification/notification.module';
 import { LlmModule } from '../llm/llm.module';
 import { DataExchangeModule } from '../dataexchange/dataexchange.module';
 import { AttachmentsModule } from '../attachments/attachments.module';
+import { SpeechModule } from '../speech/speech.module';
 
 @Module({
   imports: [
+    SpeechModule,
     IdentityModule,
     ClassificationModule,
     BhashiniModule,
