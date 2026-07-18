@@ -92,13 +92,16 @@ export function downsampleTo16k(input: Float32Array, inputRate: number): Float32
   const outLen = Math.floor(input.length / ratio);
   const out = new Float32Array(outLen);
   // Average the source window per output sample — a cheap low-pass that avoids
-  // the aliasing hiss plain decimation would add to the uploaded speech.
+  // the aliasing hiss plain decimation would add to the uploaded speech. When
+  // the input rate is BELOW 16 k (8 k telephony mics), windows can be empty —
+  // hold the nearest source sample instead of interleaving zeros (which would
+  // shred the waveform into inaudible noise).
   for (let i = 0; i < outLen; i++) {
     const start = Math.floor(i * ratio);
     const end = Math.min(Math.floor((i + 1) * ratio), input.length);
     let sum = 0;
     for (let j = start; j < end; j++) sum += input[j];
-    out[i] = end > start ? sum / (end - start) : 0;
+    out[i] = end > start ? sum / (end - start) : input[Math.min(start, input.length - 1)];
   }
   return out;
 }
@@ -190,9 +193,11 @@ export class PcmSegmenter {
     }
   }
 
-  /** Emit whatever is buffered (call on Stop) — never discards real audio. */
+  /** Emit whatever is buffered (call on Stop) — never discards real audio.
+   *  Ships whenever ANY speech was heard, however brief, or the buffer is long
+   *  enough that the quiet-classifier might simply have missed soft speech. */
   flush() {
-    if (this.totalSamples / TARGET_RATE >= 0.6) this.cut();
+    if (this.speechSamples > 0 || this.totalSamples / TARGET_RATE >= 0.6) this.cut();
     else this.reset();
   }
 
@@ -212,9 +217,13 @@ export class PcmSegmenter {
       off += c.length;
     }
     // Keep a short tail of the pause — natural end-of-phrase, smaller upload.
+    // The trim is CAPPED at 2 s: with a quiet mic, trailingSilence can span
+    // nearly the whole buffer (soft speech misclassified as silence), and an
+    // uncapped trim would throw the citizen's words away.
+    const trimSec = Math.min(2, Math.max(0, this.trailingSilence - 0.3));
     const keep = Math.max(
       TARGET_RATE, // never less than 1 s
-      joined.length - Math.floor(Math.max(0, this.trailingSilence - 0.3) * TARGET_RATE),
+      joined.length - Math.floor(trimSec * TARGET_RATE),
     );
     const seg = joined.subarray(0, Math.min(keep, joined.length));
     const durationSec = seg.length / TARGET_RATE;
@@ -288,14 +297,23 @@ export function useAsrPipeline(onDegrade?: (reason: 'no-key' | 'errors') => void
   const bufferedRef = useRef<Blob[]>([]);
   const errStreakRef = useRef(0);
   const hasTextRef = useRef(false);
+  // inFlight = segments in the transcription queue PLUS segments parked while
+  // the status probe resolves — both must hold the submit gates, or the user
+  // could send before their buffered words come back as text.
+  const pendingRef = useRef({ queue: 0, buffered: 0 });
   const onDegradeRef = useRef(onDegrade);
   onDegradeRef.current = onDegrade;
+
+  const publishInFlight = useCallback(() => {
+    setInFlight(pendingRef.current.queue + pendingRef.current.buffered);
+  }, []);
 
   const rebuild = useCallback(() => {
     const gen = ++genRef.current; // stale-instance guard across re-records
     errStreakRef.current = 0;
     hasTextRef.current = false;
     bufferedRef.current = [];
+    pendingRef.current = { queue: 0, buffered: 0 };
     const queue = new TranscriptQueue(
       (r) => {
         if (genRef.current !== gen) return;
@@ -305,14 +323,17 @@ export function useAsrPipeline(onDegrade?: (reason: 'no-key' | 'errors') => void
         if (r.lang) setDet(r);
       },
       (n) => {
-        if (genRef.current === gen) setInFlight(n);
+        if (genRef.current !== gen) return;
+        pendingRef.current.queue = n;
+        publishInFlight();
       },
       () => {
         if (genRef.current !== gen) return;
         errStreakRef.current++;
         // Two hard failures with nothing transcribed yet → the service is down
         // or the key is bad. Stop burning uploads; tell the surface to degrade.
-        if (errStreakRef.current >= 2 && !hasTextRef.current) {
+        // Latched on the true→false transition so it can only fire once.
+        if (errStreakRef.current >= 2 && !hasTextRef.current && serverAsrRef.current === true) {
           serverAsrRef.current = false;
           setServerAsr(false);
           setDegraded(true);
@@ -323,32 +344,45 @@ export function useAsrPipeline(onDegrade?: (reason: 'no-key' | 'errors') => void
     queueRef.current = queue;
     segRef.current = new PcmSegmenter((wav) => {
       if (genRef.current !== gen) return;
-      if (serverAsrRef.current === true) queue.push(wav);
-      else if (serverAsrRef.current === null) bufferedRef.current.push(wav); // status pending
+      if (serverAsrRef.current === true) {
+        queue.push(wav);
+      } else if (serverAsrRef.current === null) {
+        bufferedRef.current.push(wav); // status pending — parked, still "in flight"
+        pendingRef.current.buffered = bufferedRef.current.length;
+        publishInFlight();
+      }
       // false → drop: fallback recognition owns the transcript now
     });
-  }, []);
+  }, [publishInFlight]);
   useEffect(() => {
     rebuild();
   }, [rebuild]);
 
   /** Kick off (or re-check) the status probe. NEVER await this before starting
-   *  the mic — segments buffer until it resolves. */
+   *  the mic — segments buffer until it resolves. Safe to call repeatedly:
+   *  onDegrade('no-key') fires only on the transition into unavailable, so a
+   *  mount-time call and a begin-time call cannot double-start the fallback
+   *  recogniser (callers start it directly when the answer is already known). */
   const ensureStatus = useCallback(() => {
     asrStatus().then((s) => {
-      if (serverAsrRef.current === false && s.asr) return; // degraded stays degraded until reset()
+      if (serverAsrRef.current === false) return; // resolved (or degraded) — nothing new
+      const transitionToOff = !s.asr; // current is null or true
       serverAsrRef.current = s.asr;
       setServerAsr(s.asr);
       if (s.asr) {
         // Segments cut while the answer was pending transcribe now, in order.
         const held = bufferedRef.current.splice(0);
+        pendingRef.current.buffered = 0;
         held.forEach((wav) => queueRef.current?.push(wav));
+        publishInFlight();
       } else {
         bufferedRef.current = [];
-        onDegradeRef.current?.('no-key');
+        pendingRef.current.buffered = 0;
+        publishInFlight();
+        if (transitionToOff) onDegradeRef.current?.('no-key');
       }
     });
-  }, []);
+  }, [publishInFlight]);
 
   const feed = useCallback((samples: Float32Array, rate: number) => {
     if (serverAsrRef.current !== false) segRef.current?.feed(samples, rate);

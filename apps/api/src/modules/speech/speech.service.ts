@@ -26,9 +26,11 @@ const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 export class SpeechService {
   private readonly log = new Logger(SpeechService.name);
   // /speech/status?probe=1 makes one real Sarvam call so an operator can check
-  // "is my key actually working in production?" from a browser. Cached briefly
-  // so the public endpoint cannot be used to burn API credits.
-  private probeCache: { at: number; live: 'ok' | 'failed'; detail?: string } | null = null;
+  // "is my key actually working in production?" from a browser. The PROMISE is
+  // cached (assigned before any await) so concurrent callers share one upstream
+  // call, and the result is held for 5 minutes so the public endpoint cannot be
+  // used to burn API credits.
+  private probeCache: { at: number; result: Promise<{ live: 'ok' | 'failed'; detail?: string }> } | null = null;
 
   async status(probe = false) {
     const enabled = sarvamEnabled();
@@ -39,16 +41,15 @@ export class SpeechService {
     if (!probe || !enabled) return base;
     const now = Date.now();
     if (!this.probeCache || now - this.probeCache.at > 5 * 60_000) {
-      try {
-        const r = await sarvamTranslate('నీళ్లు రావడం లేదు', 'en');
-        this.probeCache = r.text
-          ? { at: now, live: 'ok' }
-          : { at: now, live: 'failed', detail: 'empty translation' };
-      } catch (e) {
-        this.probeCache = { at: now, live: 'failed', detail: (e as Error).message.slice(0, 200) };
-      }
+      this.probeCache = {
+        at: now,
+        result: sarvamTranslate('నీళ్లు రావడం లేదు', 'en', { attempts: 1 })
+          .then((r): { live: 'ok' | 'failed'; detail?: string } => (r.text ? { live: 'ok' } : { live: 'failed', detail: 'empty translation' }))
+          .catch((e): { live: 'ok' | 'failed'; detail?: string } => ({ live: 'failed', detail: (e as Error).message.slice(0, 200) })),
+      };
     }
-    return { ...base, live: this.probeCache.live, ...(this.probeCache.detail ? { detail: this.probeCache.detail } : {}) };
+    const probeResult = await this.probeCache.result;
+    return { ...base, live: probeResult.live, ...(probeResult.detail ? { detail: probeResult.detail } : {}) };
   }
 
   async transcribe(audioBase64: string, mime?: string, languageHint?: string): Promise<TranscriptResult> {
@@ -68,9 +69,10 @@ export class SpeechService {
     try {
       stt = await sarvamSpeechToText(audio, mime, languageHint ?? null);
     } catch (e) {
-      // Surface a clean 503 (not a 500 stack) so the client degrades gracefully.
+      // Clean, GENERIC 503 — the upstream detail (plan, model, key state) goes
+      // to the server log and the operator-facing probe, never to the public.
       this.log.warn(`Sarvam STT failed: ${(e as Error).message}`);
-      throw new ServiceUnavailableException(`Speech recognition upstream failed: ${(e as Error).message.slice(0, 200)}`);
+      throw new ServiceUnavailableException('Speech recognition is temporarily unavailable — the app falls back to on-device recognition.');
     }
     const names = langName(stt.lang);
     return { transcript: stt.transcript, lang: stt.lang, nameEn: names.en, nameNative: names.native, provider: 'sarvam' };
@@ -84,8 +86,14 @@ export class SpeechService {
   async tryTranscribeBase64(audioBase64?: string | null, mime?: string | null): Promise<TranscriptResult | null> {
     if (!audioBase64 || !sarvamEnabled()) return null;
     try {
-      const r = await this.transcribe(audioBase64, mime ?? undefined);
-      return r.transcript ? r : null;
+      const audio = Buffer.from(audioBase64, 'base64');
+      if (!audio.length || audio.length > MAX_AUDIO_BYTES) return null;
+      // Single attempt + tight timeout: this runs INSIDE the citizen's submit
+      // request — a struggling upstream must never stack retries onto it.
+      const stt = await sarvamSpeechToText(audio, mime ?? undefined, null, { attempts: 1, timeoutMs: 12000 });
+      if (!stt.transcript) return null;
+      const names = langName(stt.lang);
+      return { transcript: stt.transcript, lang: stt.lang, nameEn: names.en, nameNative: names.native, provider: 'sarvam' };
     } catch (e) {
       this.log.debug(`server-side transcription skipped: ${(e as Error).message}`);
       return null;

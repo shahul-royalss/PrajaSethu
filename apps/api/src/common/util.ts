@@ -39,10 +39,12 @@ export function normalize(text: string): string {
 }
 
 // Token set for Jaccard similarity (pilot dedup substitute for pgvector embeddings).
+// \p{M} kept deliberately: Indic vowel signs/virama are combining Marks — strip
+// them and Telugu/Hindi text collapses into meaningless single consonants.
 export function tokenSet(text: string): Set<string> {
   return new Set(
     normalize(text)
-      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .replace(/[^\p{L}\p{M}\p{N}\s]/gu, ' ')
       .split(' ')
       .filter((t) => t.length > 1),
   );

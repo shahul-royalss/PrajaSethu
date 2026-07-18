@@ -341,7 +341,11 @@ export class GrievancesService {
       };
     }
 
-    const routeResult = await this.triageAndRoute(grievance.id, descriptionEn || description, extraction);
+    // Classify on BOTH surfaces — the citizen's original words and the English
+    // working text — so native-script vocabulary and translated vocabulary both
+    // light up the model's features.
+    const classifyText = descriptionEn && descriptionEn !== description ? `${description}\n${descriptionEn}` : description;
+    const routeResult = await this.triageAndRoute(grievance.id, classifyText, extraction);
     const fresh = await this.getOrThrow(grievance.id);
     const officer = fresh.currentAssigneeId ? await this.currentOfficer(fresh) : null;
     return {
@@ -377,11 +381,20 @@ export class GrievancesService {
       probability: p.probability,
     }));
 
-    // The department must actually exist in this pilot's seeded taxonomy to be routable.
+    // Routing policy (revised): the citizen NEVER waits on a human to pick a
+    // department. The best routable prediction is assigned immediately —
+    // stage-B top1 first, the stage-A (LLM) hint as fallback. When the two
+    // stages agree above the gate, that's a clean auto-route; anything less
+    // confident still routes, but ALSO opens a non-blocking AI-Gate audit task
+    // so an officer confirms or corrects it — and the correction retrains the
+    // classifier (TrainingEvent). Only a complaint with NO routable signal at
+    // all falls back to the human-verification hold (rare by construction).
     const routable = top1 ? await this.prisma.department.findUnique({ where: { id: top1.deptId } }) : null;
+    const hintRoutable = hintA && hintA !== top1?.deptId ? await this.prisma.department.findUnique({ where: { id: hintA } }) : null;
+    const targetDept = routable ? top1!.deptId : hintRoutable ? hintA! : null;
 
     const agree = !!top1 && !!hintA && top1.deptId === hintA;
-    const pass = !!top1 && top1.probability >= AUTO_ROUTE_GATE && agree && !!routable;
+    const confident = !!routable && !!top1 && top1.probability >= AUTO_ROUTE_GATE && agree;
 
     await this.ledger.append({
       grievanceId,
@@ -391,31 +404,45 @@ export class GrievancesService {
         stageA_hint: hintA,
         stageB_top3: top3,
         stageB_model: stageB.modelVersion,
+        stageB_rationale: stageB.rationale,
         gate: AUTO_ROUTE_GATE,
         agree,
-        decision: pass ? 'AUTO_ROUTE' : 'HUMAN_VERIFICATION',
+        decision: confident ? 'AUTO_ROUTE' : targetDept ? 'AUTO_ROUTE_WITH_AUDIT' : 'HUMAN_VERIFICATION',
         severity: extraction.severity,
         urgency: extraction.urgency,
         extractionSource: extraction.source,
       },
     });
 
-    if (pass && top1) {
-      const subject = await this.classification.bestSubjectFor(top1.deptId, workingText);
+    if (targetDept) {
+      const subject = await this.classification.bestSubjectFor(targetDept, workingText);
       await this.prisma.grievance.update({
         where: { id: grievanceId },
-        data: { aiConfidence: top1.probability, routedBy: 'AI' },
+        data: { aiConfidence: top1?.probability ?? null, routedBy: confident ? 'AI' : 'AI_PROVISIONAL' },
       });
       await this.classifyAndAssign(
         grievanceId,
-        { deptId: top1.deptId, subjectId: subject.subjectId ?? undefined, category: subject.category },
+        { deptId: targetDept, subjectId: subject.subjectId ?? undefined, category: subject.category },
         undefined,
         false,
       );
-      return { gate: 'AUTO_ROUTED', top3, confidence: top1.probability };
+      if (!confident) {
+        // Non-blocking audit: the case is already with the department; the
+        // AI-Gate desk double-checks it within the verification SLA.
+        await this.prisma.verificationTask.create({
+          data: {
+            grievanceId,
+            suggestions: JSON.stringify(top3),
+            llmHint: hintA,
+            rationale: `${extraction.summaryEn}\n[Routed provisionally to ${targetDept} — confirm or correct.]`,
+            slaDeadline: new Date(Date.now() + VERIFICATION_SLA_HOURS * 60 * 60 * 1000),
+          },
+        });
+      }
+      return { gate: 'AUTO_ROUTED', top3, confidence: top1?.probability };
     }
 
-    // Below the gate (or disagreement) → human verification queue (§8.4).
+    // No routable signal anywhere → human verification queue (§8.4).
     const g = await this.getOrThrow(grievanceId);
     this.assertTransition(g.status, Status.PENDING_VERIFICATION);
     await this.prisma.grievance.update({
@@ -435,7 +462,7 @@ export class GrievancesService {
       grievanceId,
       eventType: LedgerEvent.PENDING_VERIFICATION,
       actorRole: 'AI',
-      payload: { top3, llmHint: hintA, slaHours: VERIFICATION_SLA_HOURS, reason: !agree && top1 && top1.probability >= AUTO_ROUTE_GATE ? 'stage disagreement' : 'below gate' },
+      payload: { top3, llmHint: hintA, slaHours: VERIFICATION_SLA_HOURS, reason: 'no routable signal' },
     });
     return { gate: 'HUMAN_VERIFICATION', top3, confidence: top1?.probability };
   }
@@ -537,7 +564,11 @@ export class GrievancesService {
     });
     // Re-enter the pipeline at understanding (§2 step ⑥).
     const extraction = await this.llm.extractComplaint({ text: g.description, languageHint: g.language });
-    const result = await this.triageAndRoute(id, g.descriptionEn || g.description, extraction);
+    const result = await this.triageAndRoute(
+      id,
+      g.descriptionEn && g.descriptionEn !== g.description ? `${g.description}\n${g.descriptionEn}` : g.description,
+      extraction,
+    );
     return { id, status: (await this.getOrThrow(id)).status, ...result };
   }
 
@@ -613,6 +644,45 @@ export class GrievancesService {
     const subject = dto.subjectId
       ? { subjectId: dto.subjectId, category: dto.category ?? g.category }
       : await this.classification.bestSubjectFor(dto.deptId, g.descriptionEn || g.description);
+
+    // Provisionally-routed cases (always-route policy) are ALREADY assigned —
+    // the officer's decision here is an audit: confirm (no-op) or correct
+    // (move the case to the right department and its officer).
+    if (g.status !== Status.PENDING_VERIFICATION) {
+      if (g.deptId === dto.deptId) {
+        return { id: grievanceId, status: g.status, deptId: g.deptId, confirmed: true };
+      }
+      const pick = await this.routing.pickOfficer({ deptId: dto.deptId, level: 1, mandal: g.mandal });
+      await this.prisma.grievance.update({
+        where: { id: grievanceId },
+        data: {
+          deptId: dto.deptId,
+          subjectId: subject.subjectId ?? null,
+          category: subject.category,
+          currentAssigneeId: pick.officer?.id ?? null,
+          currentLevel: 1,
+        },
+      });
+      if (pick.officer) {
+        await this.prisma.assignment.create({
+          data: { grievanceId, assigneeId: pick.officer.id, level: 1, assignedBy: actor.sub, reason: 'AI-Gate audit correction' },
+        });
+      }
+      await this.ledger.append({
+        grievanceId,
+        eventType: LedgerEvent.REASSIGNED,
+        actorRole: actor.role!,
+        payload: { deptChanged: { from: g.deptId, to: dto.deptId }, reason: 'AI-Gate audit correction', officer: pick.officer?.name ?? null },
+      });
+      await this.notifications.send({
+        grievanceId,
+        to: 'citizen',
+        template: 'REROUTED',
+        body: `Update on ${g.ysr}: after review, your complaint was moved to the correct department (${dto.deptId}) and a new officer now has it.`,
+      });
+      return { id: grievanceId, status: g.status, deptId: dto.deptId, corrected: true, officer: pick.officer?.name ?? null };
+    }
+
     return this.classifyAndAssign(
       grievanceId,
       { deptId: dto.deptId, subjectId: subject.subjectId ?? undefined, category: subject.category },

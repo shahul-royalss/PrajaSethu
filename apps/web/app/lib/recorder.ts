@@ -68,6 +68,10 @@ export function useVoiceRecorder(onPcm?: (samples: Float32Array, sampleRate: num
   const procRef = useRef<ScriptProcessorNode | null>(null);
   const onPcmRef = useRef(onPcm);
   onPcmRef.current = onPcm;
+  // Invalidates a start() still awaiting getUserMedia when reset()/unmount
+  // happens first — otherwise the late-resolving start would leave an orphan
+  // recorder + open mic behind a fresh (or dead) component.
+  const startGenRef = useRef(0);
   const rafRef = useRef<number>(0);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startedAtRef = useRef(0);
@@ -94,12 +98,14 @@ export function useVoiceRecorder(onPcm?: (samples: Float32Array, sampleRate: num
 
   useEffect(
     () => () => {
+      startGenRef.current++;
       cleanupAudio();
       try {
         mediaRef.current?.state !== 'inactive' && mediaRef.current?.stop();
       } catch {
         /* already stopped */
       }
+      mediaRef.current = null; // a late onstop must not touch dead state
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     },
     [cleanupAudio],
@@ -137,6 +143,7 @@ export function useVoiceRecorder(onPcm?: (samples: Float32Array, sampleRate: num
       setStatus('error');
       return;
     }
+    const gen = ++startGenRef.current;
     setStatus('requesting');
     setBlob(null);
     if (urlRef.current) {
@@ -160,6 +167,12 @@ export function useVoiceRecorder(onPcm?: (samples: Float32Array, sampleRate: num
       setStatus((e as DOMException)?.name === 'NotAllowedError' ? 'denied' : 'error');
       return;
     }
+    // reset()/unmount happened while the permission prompt was up — release the
+    // mic and walk away instead of resurrecting a dead recording session.
+    if (gen !== startGenRef.current) {
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
     streamRef.current = stream;
 
     const mime = pickMime();
@@ -176,6 +189,7 @@ export function useVoiceRecorder(onPcm?: (samples: Float32Array, sampleRate: num
       if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
     };
     rec.onstop = () => {
+      if (mediaRef.current !== rec) return; // superseded by reset()/unmount
       const out = new Blob(chunksRef.current, { type: mimeRef.current });
       setBlob(out);
       const u = URL.createObjectURL(out);
@@ -251,6 +265,7 @@ export function useVoiceRecorder(onPcm?: (samples: Float32Array, sampleRate: num
   }, []);
 
   const reset = useCallback(() => {
+    startGenRef.current++; // invalidate any start() still awaiting the mic
     try {
       mediaRef.current?.state !== 'inactive' && mediaRef.current?.stop();
     } catch {

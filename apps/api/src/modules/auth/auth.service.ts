@@ -74,13 +74,26 @@ export class AuthService {
     await this.prisma.otp.update({ where: { id: otp.id }, data: { consumed: true } });
 
     let citizen = await this.prisma.citizen.findFirst({ where: { mobile } });
+    const isNew = !citizen;
     if (!citizen) {
       citizen = await this.prisma.citizen.create({ data: { mobile, name: name ?? 'Citizen' } });
     }
     const payload = { sub: citizen.id, kind: 'CITIZEN', mobile: citizen.mobile, name: citizen.name };
+    // First sign-in with a new number → the app collects the profile ONCE;
+    // every later sign-in with the same number skips straight to the home.
+    const profileComplete = !!(citizen.name && citizen.name !== 'Citizen' && citizen.village && citizen.mandal && citizen.district);
     return {
       accessToken: await this.jwt.signAsync(payload),
-      citizen: { id: citizen.id, name: citizen.name, mobileMasked: mobile.slice(0, 2) + 'XXXXXX' + mobile.slice(-2) },
+      citizen: {
+        id: citizen.id,
+        name: citizen.name,
+        mobileMasked: mobile.slice(0, 2) + 'XXXXXX' + mobile.slice(-2),
+        village: citizen.village,
+        mandal: citizen.mandal,
+        district: citizen.district,
+      },
+      isNew,
+      profileComplete,
     };
   }
 }

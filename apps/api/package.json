@@ -10,6 +10,7 @@
     "db:push": "prisma db push --skip-generate",
     "db:reset": "prisma db push --force-reset --skip-generate",
     "db:seed": "ts-node --transpile-only -P prisma/tsconfig.seed.json prisma/seed.ts",
+    "db:baseline": "ts-node --transpile-only -P prisma/tsconfig.seed.json prisma/ensure-baseline.ts",
     "prisma:generate": "prisma generate",
     "setup": "prisma generate && prisma db push --skip-generate && npm run db:seed"
   },
