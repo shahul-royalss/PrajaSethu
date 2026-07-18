@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { jaccard, normalize, parseJson, tokenSet } from '../../common/util';
 import { Category } from '../../common/constants';
-import { AP_GRIEVANCE_CORPUS, CorpusExample } from './ap-grievance-corpus';
+import { AP_GRIEVANCE_CORPUS, CorpusExample, corpusWith } from './ap-grievance-corpus';
+import { buildIndex, ClassifierIndex, DeptLexicon } from './classifier-core';
 import { DEPARTMENT_KB } from '../llm/ai-knowledge';
 
 export interface ClassificationResult {
@@ -49,57 +50,27 @@ const DISTRESS_KEYWORDS = [
   'ప్రాణ', 'ప్రమాద', 'అత్యవసర', 'ప్రాణాపాయం', 'చనిపోత', 'వేధింపు', 'భయం', 'ప్రాణహాని',
 ];
 
-// Softmax sharpening constant — the temperature-scaling stand-in that turns raw
-// similarity scores into calibrated probabilities (validated against the seed
-// fixtures: clear single-topic complaints ≥ .95, vague one-liners ≤ .6).
-const SOFTMAX_SCALE = 13;
-
 /**
  * NLP classification, dedup and distress detection (Saarthi 2.0 §8–§9).
  *
- * Stage B of the two-stage classifier lives here: a nearest-centroid model over
- * the labelled AP grievance corpus (word + character-trigram features, cosine
- * similarity, keyword-feature fusion) whose scores are softmax-calibrated into
- * real probabilities — the number the 95% auto-route gate trusts. Human
- * verification decisions (TrainingEvent) are folded into the corpus at
- * inference time, closing the weekly active-learning loop at pilot scale.
- * The production path swaps this class for a fine-tuned MuRIL/IndicBERT
- * checkpoint behind the same interface.
+ * Stage B of the two-stage classifier lives here, backed by the pure
+ * classifier core (classifier-core.ts): a TF-IDF k-nearest-neighbour model
+ * over the labelled AP grievance corpus, fused with the department KB and the
+ * seeded subject-taxonomy lexicons, calibrated into real probabilities —
+ * validated by scripts/eval-classifier.ts (leave-one-out + held-out novel
+ * phrasings). Human verification decisions (TrainingEvent) are folded into
+ * the index at inference time, closing the active-learning loop: every
+ * officer correction makes the next classification better. The production
+ * path swaps the core for a fine-tuned MuRIL/IndicBERT checkpoint behind the
+ * same interface.
  */
 @Injectable()
 export class ClassificationService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // ── Feature extraction: word tokens + char trigrams (script-agnostic) ─────
-  private features(text: string): Map<string, number> {
-    const f = new Map<string, number>();
-    const norm = normalize(text).replace(/[^\p{L}\p{N}\s]/gu, ' ');
-    for (const w of norm.split(/\s+/)) {
-      if (w.length < 2) continue;
-      f.set(`w:${w}`, (f.get(`w:${w}`) ?? 0) + 1);
-      const chars = [...w];
-      for (let i = 0; i + 3 <= chars.length; i++) {
-        const g = chars.slice(i, i + 3).join('');
-        f.set(`g:${g}`, (f.get(`g:${g}`) ?? 0) + 0.5);
-      }
-    }
-    return f;
-  }
-
-  private cosine(a: Map<string, number>, b: Map<string, number>): number {
-    let dot = 0;
-    let na = 0;
-    let nb = 0;
-    for (const [, v] of a) na += v * v;
-    for (const [, v] of b) nb += v * v;
-    if (!na || !nb) return 0;
-    const [small, large] = a.size <= b.size ? [a, b] : [b, a];
-    for (const [k, v] of small) {
-      const w = large.get(k);
-      if (w) dot += v * w;
-    }
-    return dot / (Math.sqrt(na) * Math.sqrt(nb));
-  }
+  // The index is precomputed and reused; it rebuilds only when the training
+  // signal changes (new active-learning examples / taxonomy edits).
+  private indexCache: { key: string; index: ClassifierIndex } | null = null;
 
   /** Recent human-verified labels, folded back into the model (active learning). */
   private async activeLearningExamples(): Promise<CorpusExample[]> {
@@ -128,83 +99,41 @@ export class ClassificationService {
 
   /**
    * Stage B — calibrated department probabilities over the full taxonomy.
-   * Fuses (a) nearest-centroid similarity against the labelled corpus,
-   * (b) subject-taxonomy keyword hits, (c) department KB keyword hits.
+   * TF-IDF k-NN over the corpus (+ active-learning examples), fused with the
+   * department KB and the seeded subject-taxonomy lexicons in the core.
    */
   async classifyProbabilities(text: string): Promise<StageBResult> {
-    const norm = normalize(text);
-    const f = this.features(text);
-
     const learned = await this.activeLearningExamples();
-    const corpus = learned.length ? [...AP_GRIEVANCE_CORPUS, ...learned] : AP_GRIEVANCE_CORPUS;
+    const subjects = await this.prisma.subject.findMany({ where: { parentId: null } }).catch(() => []);
 
-    // Per-department best-example + centroid similarity.
-    const deptIds = [...new Set([...corpus.map((c) => c.deptId), ...DEPARTMENT_KB.map((d) => d.deptId)])];
-    const scores = new Map<string, number>();
-    const evidence = new Map<string, string[]>();
-
-    for (const dept of deptIds) {
-      const examples = corpus.filter((c) => c.deptId === dept);
-      let best = 0;
-      let sum = 0;
-      for (const ex of examples) {
-        const s = this.cosine(f, this.features(ex.text));
-        best = Math.max(best, s);
-        sum += s;
+    const key = `${AP_GRIEVANCE_CORPUS.length}+al${learned.length}+sub${subjects.length}`;
+    if (!this.indexCache || this.indexCache.key !== key) {
+      // Merge KB keywords with the DB taxonomy keywords, per department.
+      const byDept = new Map<string, string[]>();
+      for (const d of DEPARTMENT_KB) byDept.set(d.deptId, [...d.keywords]);
+      for (const s of subjects) {
+        const kws = parseJson<string[]>(s.keywords, []);
+        byDept.set(s.deptId, [...(byDept.get(s.deptId) ?? []), ...kws]);
       }
-      const centroidish = examples.length ? 0.65 * best + 0.35 * (sum / examples.length) : 0;
-      scores.set(dept, centroidish);
-      evidence.set(dept, []);
+      const lexicons: DeptLexicon[] = [...byDept.entries()].map(([deptId, keywords]) => ({ deptId, keywords }));
+      this.indexCache = { key, index: buildIndex(corpusWith(learned), lexicons) };
     }
 
-    // Keyword-feature fusion: seeded Subject taxonomy…
-    const subjects = await this.prisma.subject.findMany({ where: { parentId: null } });
-    for (const s of subjects) {
-      const hits = parseJson<string[]>(s.keywords, []).filter((k) => norm.includes(normalize(k)));
-      if (hits.length) {
-        scores.set(s.deptId, (scores.get(s.deptId) ?? 0) + Math.min(hits.length * 0.09, 0.3));
-        evidence.get(s.deptId)?.push(...hits.slice(0, 4));
-      }
+    const r = this.indexCache.index.classify(text);
+    const modelVersion = `saarthi-stageB-knn-v3${learned.length ? `+al${learned.length}` : ''}`;
+    if (!r.top1) {
+      return { probs: r.probs, top1: null, rationale: 'No lexical or learned signal matched — needs human categorisation.', modelVersion };
     }
-    // …and the department knowledge base.
-    for (const d of DEPARTMENT_KB) {
-      const hits = d.keywords.filter((k) => norm.includes(k.toLowerCase()));
-      if (hits.length) {
-        scores.set(d.deptId, (scores.get(d.deptId) ?? 0) + Math.min(hits.length * 0.06, 0.2));
-        evidence.get(d.deptId)?.push(...hits.slice(0, 3));
-      }
-    }
-
-    // Temperature-scaled softmax → calibrated probabilities.
-    const entries = [...scores.entries()];
-    const max = Math.max(...entries.map(([, s]) => s), 0);
-    if (max <= 0.02) {
-      // Nothing matched at all — flat, honest uncertainty.
-      const p = 1 / entries.length;
-      const probs = entries.map(([deptId]) => ({ deptId, probability: Number(p.toFixed(4)) }));
-      return { probs, top1: null, rationale: 'No lexical or learned signal matched — needs human categorisation.', modelVersion: this.modelVersion(learned.length) };
-    }
-    const exps = entries.map(([deptId, s]) => ({ deptId, e: Math.exp((s - max) * SOFTMAX_SCALE) }));
-    const z = exps.reduce((a, x) => a + x.e, 0);
-    const probs = exps
-      .map((x) => ({ deptId: x.deptId, probability: Number((x.e / z).toFixed(4)) }))
-      .sort((a, b) => b.probability - a.probability);
-
-    const top1 = probs[0] ?? null;
-    const topEvidence = top1 ? (evidence.get(top1.deptId) ?? []) : [];
+    const nearest = r.neighbors[0];
     return {
-      probs,
-      top1,
-      rationale: top1
-        ? `Nearest-centroid + keyword fusion → ${top1.deptId} at p=${(top1.probability * 100).toFixed(1)}%` +
-          (topEvidence.length ? ` (signals: ${[...new Set(topEvidence)].slice(0, 5).join(', ')})` : '')
-        : 'No signal.',
-      modelVersion: this.modelVersion(learned.length),
+      probs: r.probs,
+      top1: r.top1,
+      rationale:
+        `TF-IDF kNN + lexicon fusion → ${r.top1.deptId} at p=${(r.top1.probability * 100).toFixed(1)}% (margin ${(r.margin * 100).toFixed(0)}pt)` +
+        (r.evidence.length ? ` · signals: ${[...new Set(r.evidence)].slice(0, 5).join(', ')}` : '') +
+        (nearest ? ` · nearest case: "${nearest.text.slice(0, 60)}" [${nearest.deptId}]` : ''),
+      modelVersion,
     };
-  }
-
-  private modelVersion(learnedCount: number): string {
-    return `saarthi-stageB-centroid-v2${learnedCount ? `+al${learnedCount}` : ''}`;
   }
 
   /** Legacy single-suggestion classify (kept for the operator-assisted path). */

@@ -18,6 +18,7 @@ import { useContinuousTranscript } from '../../lib/speech';
 import { blobToBase64, fmtClock, useVoiceRecorder } from '../../lib/recorder';
 import { ALL_LANGUAGES_STRIP, detectClientLanguage, ClientLangDetection } from '../../lib/langdetect';
 import { useAsrPipeline } from '../../lib/asr';
+import { fetchProfile } from '../../components/ProfileForm';
 
 interface Geography {
   districts: string[];
@@ -338,7 +339,11 @@ function VoiceCapture({
     // any segments cut in the meantime are buffered, so a sleepy server can
     // never make the record button feel dead or lose the first sentence.
     recordingRef.current = true;
-    asr.ensureStatus(); // resolves → false starts on-device recognition via onDegrade
+    // Already known unavailable → start on-device recognition directly (the
+    // degrade callback fires only on the transition, never twice). Unknown →
+    // ensureStatus resolves in parallel and the callback starts it if needed.
+    if (serverAsr === false) st.begin();
+    else asr.ensureStatus();
     await rec.start();
   };
   const finish = () => {
@@ -381,7 +386,7 @@ function VoiceCapture({
   return (
     <div className="animate-fade-up">
       <div className="flex items-center justify-between">
-        <button onClick={() => { st.end(); rec.reset(); onBack(); }} className="text-sm font-semibold text-slate-500">← {t('back')}</button>
+        <button onClick={() => { recordingRef.current = false; st.end(); rec.reset(); asr.reset(); onBack(); }} className="text-sm font-semibold text-slate-500">← {t('back')}</button>
         {badge && (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-india/25 bg-india/5 px-3 py-1 text-[12px] font-semibold text-india animate-fade-up">
             <span className="h-1.5 w-1.5 rounded-full bg-india" aria-hidden />
@@ -596,6 +601,21 @@ function Details({
   useEffect(() => {
     api.get<Geography>('/reference/geography').then(setGeo).catch(() => {});
   }, []);
+
+  // Signed-in citizens never re-type where they live — the place fields
+  // prefill from the profile collected at first login (still editable here,
+  // e.g. when reporting a problem in another village).
+  useEffect(() => {
+    if (!signedIn) return;
+    const tk = getCitizenToken();
+    if (!tk) return;
+    fetchProfile(tk).then((p) => {
+      if (!p) return;
+      if (p.district) setDistrict(p.district);
+      if (p.mandal) setMandal(p.mandal);
+      if (p.village) setVillage((v) => v || p.village || '');
+    });
+  }, [signedIn]);
 
   const capture = useCallback(() => {
     if (!navigator.geolocation) {

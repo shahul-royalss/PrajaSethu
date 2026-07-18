@@ -36,10 +36,16 @@ export function sarvamToInternalLang(code?: string | null): string | null {
   return base === 'od' ? 'or' : base;
 }
 
+// Languages Sarvam actually accepts — an unvalidated hint (public endpoint)
+// must fall back to auto-detect, never become a made-up "xx-IN" that 400s and
+// walks the model ladder for nothing.
+const SARVAM_LANGS = new Set(['bn', 'en', 'gu', 'hi', 'kn', 'ml', 'mr', 'od', 'pa', 'ta', 'te']);
+
 export function internalToSarvamLang(code?: string | null): string {
   if (!code) return 'unknown';
   const base = code.toLowerCase().split('-')[0];
-  return `${base === 'or' ? 'od' : base}-IN`;
+  const mapped = base === 'or' ? 'od' : base;
+  return SARVAM_LANGS.has(mapped) ? `${mapped}-IN` : 'unknown';
 }
 
 function extForMime(mime?: string): string {
@@ -64,8 +70,15 @@ class SarvamHttpError extends Error {
 const RETRYABLE = (status: number) => status === 429 || status >= 500;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function call(path: string, makeInit: () => RequestInit, timeoutMs: number): Promise<any> {
-  const delays = [0, 900, 2200]; // one call + two retries on transient failures
+async function call(
+  path: string,
+  makeInit: () => RequestInit,
+  timeoutMs: number,
+  attempts = 3,
+): Promise<any> {
+  // Caller-tunable retry budget: interactive/best-effort paths pass attempts=1
+  // so a dead upstream can never stack ~90 s of retries inside a user request.
+  const delays = [0, 900, 2200].slice(0, Math.max(1, Math.min(attempts, 3)));
   let lastErr: Error = new Error('Sarvam request failed');
   for (let attempt = 0; attempt < delays.length; attempt++) {
     if (delays[attempt]) await sleep(delays[attempt]);
@@ -127,6 +140,7 @@ export async function sarvamSpeechToText(
   audio: Buffer,
   mime?: string,
   languageHint?: string | null,
+  opts?: { attempts?: number; timeoutMs?: number },
 ): Promise<{ transcript: string; lang: string | null }> {
   // Known-working model first, but keep the rest of the ladder behind it — a
   // model that worked yesterday can be retired from a plan tomorrow.
@@ -152,7 +166,8 @@ export async function sarvamSpeechToText(
           fd.append('language_code', langCode);
           return { method: 'POST', body: fd };
         },
-        30000,
+        opts?.timeoutMs ?? 30000,
+        opts?.attempts ?? 3,
       );
       workingSttModel = model;
       return {
@@ -161,51 +176,95 @@ export async function sarvamSpeechToText(
       };
     } catch (e) {
       lastErr = e as Error;
-      // Only walk down the ladder on 4xx that plausibly means "unknown model /
-      // unsupported parameter" — auth, payload and transient errors are final.
+      // Only walk down the ladder when the error actually names the model —
+      // payload/parameter 400s (bad audio, oversize file) would fail on every
+      // rung identically, and auth/transient errors are final.
       const status = e instanceof SarvamHttpError ? e.status : 0;
-      if (!(status === 400 || status === 404 || status === 422)) throw e;
+      const modelRejected = (status === 400 || status === 404 || status === 422) && /model/i.test((e as Error).message);
+      if (!modelRejected) throw e;
+      if (workingSttModel === model) workingSttModel = null; // stale cache — forget it
     }
   }
   throw lastErr ?? new Error('Sarvam STT failed');
 }
 
-/** Any-language → English (or other target) translation with auto source detection. */
+// Per-model input caps from Sarvam's contract (mayura:v1 rejects >1000 chars).
+function translateMaxLen(model: string): number {
+  return model === 'mayura:v1' ? 1000 : 2000;
+}
+
+/** Split at sentence/whitespace boundaries into chunks the model accepts. */
+function chunkForTranslate(input: string, maxLen: number): string[] {
+  const text = input.trim();
+  if (text.length <= maxLen) return [text];
+  const chunks: string[] = [];
+  let rest = text;
+  while (rest.length > 0 && chunks.length < 5) {
+    if (rest.length <= maxLen) {
+      chunks.push(rest);
+      break;
+    }
+    const window = rest.slice(0, maxLen);
+    // Prefer a sentence end, then any whitespace, then a hard cut.
+    const sentence = Math.max(window.lastIndexOf('। '), window.lastIndexOf('. '), window.lastIndexOf('? '), window.lastIndexOf('! '), window.lastIndexOf('\n'));
+    const space = window.lastIndexOf(' ');
+    const cut = sentence > maxLen * 0.4 ? sentence + 1 : space > maxLen * 0.4 ? space : maxLen;
+    chunks.push(rest.slice(0, cut).trim());
+    rest = rest.slice(cut).trim();
+  }
+  return chunks.filter(Boolean);
+}
+
+/** Any-language → English (or other target) translation with auto source
+ *  detection. Long inputs are translated in sentence-boundary chunks (mayura:v1
+ *  rejects >1000 chars) instead of being silently truncated. */
 export async function sarvamTranslate(
   input: string,
   targetInternal = 'en',
+  opts?: { attempts?: number },
 ): Promise<{ text: string; sourceLang: string | null }> {
-  const payload = (source: string) => ({
-    input: input.slice(0, 2000),
-    source_language_code: source,
-    target_language_code: internalToSarvamLang(targetInternal),
-    model: process.env.SARVAM_TRANSLATE_MODEL ?? 'mayura:v1',
-    mode: 'formal',
-  });
-  const post = (source: string) =>
+  const model = process.env.SARVAM_TRANSLATE_MODEL ?? 'mayura:v1';
+  const attempts = opts?.attempts ?? 3;
+  const post = (chunk: string, source: string) =>
     call(
       '/translate',
       () => ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload(source)),
+        body: JSON.stringify({
+          input: chunk,
+          source_language_code: source,
+          target_language_code: internalToSarvamLang(targetInternal),
+          model,
+          mode: 'formal',
+        }),
       }),
       15000,
+      attempts,
     );
-  let body: any;
-  try {
-    body = await post('auto');
-  } catch (e) {
-    // Some plans/models reject source "auto" — fall back to the script-detected
-    // source language and try once more.
-    const status = e instanceof SarvamHttpError ? e.status : 0;
-    if (!(status === 400 || status === 422)) throw e;
-    const det = detectLanguage(input);
-    if (!det.lang || det.lang === targetInternal) throw e;
-    body = await post(internalToSarvamLang(det.lang));
-  }
-  return {
-    text: (body?.translated_text ?? '').trim(),
-    sourceLang: sarvamToInternalLang(body?.source_language_code),
+  const translateChunk = async (chunk: string): Promise<{ text: string; sourceLang: string | null }> => {
+    let body: any;
+    try {
+      body = await post(chunk, 'auto');
+    } catch (e) {
+      // Some plans/models reject source "auto" — fall back to the
+      // script-detected source language and try once more.
+      const status = e instanceof SarvamHttpError ? e.status : 0;
+      if (!(status === 400 || status === 422)) throw e;
+      const det = detectLanguage(chunk);
+      if (!det.lang || det.lang === targetInternal) throw e;
+      body = await post(chunk, internalToSarvamLang(det.lang));
+    }
+    return {
+      text: (body?.translated_text ?? '').trim(),
+      sourceLang: sarvamToInternalLang(body?.source_language_code),
+    };
   };
+
+  const chunks = chunkForTranslate(input, translateMaxLen(model));
+  const first = await translateChunk(chunks[0] ?? '');
+  if (chunks.length === 1) return first;
+  const restTexts: string[] = [];
+  for (const c of chunks.slice(1)) restTexts.push((await translateChunk(c)).text);
+  return { text: [first.text, ...restTexts].filter(Boolean).join(' '), sourceLang: first.sourceLang };
 }

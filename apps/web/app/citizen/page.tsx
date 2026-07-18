@@ -111,6 +111,14 @@ function Dashboard({ token, citizen, onLogout }: { token: string; citizen: Citiz
           <Logo size={30} showSub={false} />
           <div className="flex items-center gap-2">
             <LanguageSwitcher compact />
+            {/* profile — tap to view/edit the details collected at first login */}
+            <Link
+              href="/citizen/profile"
+              aria-label={t('profTitle')}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-navy-700 to-brand-light font-display text-[13px] font-bold text-white shadow-card"
+            >
+              {firstName.charAt(0).toUpperCase()}
+            </Link>
             <button
               onClick={onLogout}
               className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-50"

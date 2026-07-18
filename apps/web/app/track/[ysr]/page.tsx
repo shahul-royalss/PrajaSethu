@@ -421,6 +421,7 @@ function ReopenPanel({ grievance, onDone }: { grievance: PublicGrievance; onDone
             <>
               <button
                 onClick={() => (rec.status === 'recording' ? stopVoice() : beginVoice())}
+                disabled={rec.status === 'requesting'}
                 className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full text-white shadow-card transition active:scale-95 ${
                   rec.status === 'recording' ? 'animate-pulse bg-red-500' : 'bg-fuchsia-600'
                 }`}

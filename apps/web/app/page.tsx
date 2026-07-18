@@ -171,11 +171,15 @@ function CitizenForm({ bi, router, flash }: { bi: (e: string, t: string) => stri
     setStep('otp');
   }
   async function verify() {
-    const r = await run(() => api.postSafe<{ accessToken: string; citizen: CitizenUser }>('/auth/citizen/verify-otp', { mobile, code: otp }));
+    const r = await run(() =>
+      api.postSafe<{ accessToken: string; citizen: CitizenUser; profileComplete?: boolean }>('/auth/citizen/verify-otp', { mobile, code: otp }),
+    );
     if (!r) return;
     saveCitizenSession(r.accessToken, r.citizen);
-    // replace — the login screen must not remain in history behind the back button
-    router.replace('/citizen');
+    // replace — the login screen must not remain in history behind the back button.
+    // A NEW number is asked for its details exactly once (onboarding); a known
+    // number goes straight home.
+    router.replace(r.profileComplete === false ? '/citizen/welcome' : '/citizen');
   }
 
   const masked = mobile.length >= 4 ? `+91 ●●●●● ●${mobile.slice(-3)}` : '+91 •••••';

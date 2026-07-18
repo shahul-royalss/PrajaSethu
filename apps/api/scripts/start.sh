@@ -22,5 +22,10 @@ else
   echo "[start] Database already has data — skipping seed (existing records preserved)."
 fi
 
+# Idempotent upserts (departments/subjects/officers) — an EXISTING database
+# gains newly added departments on redeploy without a reseed or data loss.
+echo "[start] Ensuring platform baseline (idempotent upserts)…"
+npm run db:baseline || echo "[start] baseline ensure failed — continuing"
+
 echo "[start] Launching SAARTHI API…"
 exec node dist/main.js

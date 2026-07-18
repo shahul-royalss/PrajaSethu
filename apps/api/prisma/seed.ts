@@ -12,6 +12,7 @@ import * as bcrypt from 'bcryptjs';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { GrievancesService } from '../src/modules/grievances/grievances.service';
+import { ensureBaseline } from './baseline';
 import { LedgerService } from '../src/modules/ledger/ledger.service';
 import { Category, Channels, Roles } from '../src/common/constants';
 import { AuthUser } from '../src/common/auth/current-user.decorator';
@@ -335,6 +336,10 @@ async function main() {
   await backdate(prisma, g12, { created: daysAgo(8), assigned: daysAgo(8), resolved: daysAgo(5), closed: daysAgo(4) });
   await backdate(prisma, g13, { created: daysAgo(1) });
   await backdate(prisma, g15, { created: daysAgo(6), assigned: daysAgo(6), resolved: daysAgo(3) });
+
+  // Complete the department taxonomy (adds MA/EDU/AGRI/POLICE/TRANSPORT/HOUSING
+  // + their officers/subjects) — the same idempotent upserts prod runs at boot.
+  await ensureBaseline(prisma, (m) => log.log(m));
 
   const g17row = await prisma.grievance.findUnique({ where: { id: g17 }, select: { status: true, isDuplicateOf: true } });
   const counts = {
